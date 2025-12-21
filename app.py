@@ -1,22 +1,50 @@
 import streamlit as st
-import requests
+import os
+from backend.parser import analyze_file  # Make sure parser.py is in backend/
 
-st.set_page_config(page_title="Auto-Documenter", layout="centered")
+st.set_page_config(page_title="📄 Auto-Documenter", layout="wide")
 
 st.title("📄 Auto-Documenter")
-st.write("Upload a Python or CSV file to auto-generate documentation.")
+st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-uploaded_file = st.file_uploader("Choose a file", type=["py", "csv"])
+# File uploader
+uploaded_file = st.file_uploader(
+    "Choose a file",
+    type=["csv", "xlsx", "xls", "json", "py"]
+)
 
 if uploaded_file:
-    with st.spinner("Processing file..."):
-        response = requests.post(
-            "http://127.0.0.1:8000/upload",
-            files={"file": uploaded_file}
-        )
+    # Ensure output folder exists
+    os.makedirs("output", exist_ok=True)
 
-    if response.status_code == 200:
-        st.success("File processed successfully ✅")
-        st.json(response.json())
+    # Save uploaded file temporarily
+    temp_path = os.path.join("output", uploaded_file.name)
+    with open(temp_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    st.info("Processing file... ⏳")
+
+    # Call the analyze_file function
+    result = analyze_file(temp_path)
+
+    if "error" in result:
+        st.error(f"❌ Error: {result['error']}")
     else:
-        st.error("Something went wrong ❌")
+        st.success("✅ File processed successfully!")
+        st.json(result)
+
+        # Download buttons
+        readme_path = "output/README.md"
+        if os.path.exists(readme_path):
+            with open(readme_path, "r", encoding="utf-8") as f:
+                st.download_button("📄 Download README.md", f, "README.md")
+
+        pdf_path = "output/report.pdf"
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                st.download_button("📄 Download PDF Report", f, "report.pdf")
+
+        readme_pdf_path = "output/README.pdf"
+        if os.path.exists(readme_pdf_path):
+            with open(readme_pdf_path, "rb") as f:
+                st.download_button("📄 Download README PDF", f, "README.pdf")
