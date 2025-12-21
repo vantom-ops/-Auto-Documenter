@@ -1,6 +1,10 @@
 import streamlit as st
 import os
-from backend.parser import analyze_file  # Make sure parser.py is in backend/
+import sys
+
+# Add backend folder to path
+sys.path.append(os.path.join(os.path.dirname(__file__), "../backend"))
+from parser import analyze_file  # now works on Streamlit Cloud
 
 st.set_page_config(page_title="📄 Auto-Documenter", layout="wide")
 
@@ -24,7 +28,7 @@ if uploaded_file:
 
     st.info("Processing file... ⏳")
 
-    # Call the analyze_file function
+    # Analyze file directly
     result = analyze_file(temp_path)
 
     if "error" in result:
