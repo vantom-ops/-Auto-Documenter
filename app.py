@@ -157,10 +157,13 @@ if uploaded_file:
 
         # ---------- PDF REPORT (FPDF2 Unicode-safe) ----------
         st.markdown("## 📝 Full PDF Report")
+
         pdf = FPDF()
         pdf.add_page()
-        # Add UTF-8 font
-        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+
+        # --- dynamic font path ---
+        font_path = os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf")
+        pdf.add_font("DejaVu", "", font_path, uni=True)
         pdf.set_font("DejaVu", "", 14)
 
         pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
@@ -177,9 +180,9 @@ if uploaded_file:
 
         # Insights & Recommendations
         pdf.ln(2)
-        pdf.multi_cell(0, 6, "Auto Insights:")
-        for i in strong_corrs:
-            pdf.multi_cell(0, 6, f"- {i}")
+        pdf.multi_cell(0, 6, "Strong Correlations:")
+        for a, b, v in strong_corrs:
+            pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
 
         # Export PDF using BytesIO
         pdf_bytes = io.BytesIO()
