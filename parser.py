@@ -4,7 +4,6 @@ import json
 from fpdf import FPDF
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
 
@@ -173,3 +172,4 @@ def analyze_file(file_path):
 
     except Exception as e:
         return {"error": str(e)}
+
