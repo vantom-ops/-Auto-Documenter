@@ -15,25 +15,16 @@ if theme == "Dark":
     st.markdown("<style>body{background-color:#222;color:white;}</style>", unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("<h1 style='text-align:center'>📄 Auto-Documenter</h1>", unsafe_allow_html=True)
+st.markdown("# 📄 Auto-Documenter")
 st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 st.markdown("---")
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
-    preview_rows = st.number_input(
-        "Preview Rows", min_value=5, max_value=50, value=10,
-        help="Number of rows to preview in the table"
-    )
-    show_graphs = st.checkbox(
-        "Show Column Graphs", value=True,
-        help="Display interactive graphs for numeric columns"
-    )
-    show_corr = st.checkbox(
-        "Show Correlation Heatmap", value=True,
-        help="Display heatmap of correlations between numeric columns"
-    )
+    preview_rows = st.number_input("Preview Rows", min_value=5, max_value=50, value=10, help="Number of rows to preview in the table")
+    show_graphs = st.checkbox("Show Column Graphs", value=True, help="Display interactive graphs for numeric columns")
+    show_corr = st.checkbox("Show Correlation Heatmap", value=True, help="Display heatmap of correlations between numeric columns")
 
 # ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json", "py"])
@@ -78,26 +69,50 @@ if uploaded_file:
 
             # ---------- METRIC CARDS ----------
             st.markdown("### 📊 Dataset Metrics")
-            col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("📝 Rows", rows)
-            col2.metric("📂 Columns", cols)
-            col3.metric("🔢 Numeric", numeric_count)
-            col4.metric("🗂 Categorical", categorical_count)
-            col5.metric("✅ Completeness (%)", completeness)
-
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("📝 Rows", rows, delta_color="normal")
+            col2.metric("📂 Columns", cols, delta_color="normal")
+            col3.metric("🔢 Numeric Columns", numeric_count, delta_color="normal")
+            col4.metric("🗂 Categorical Columns", categorical_count, delta_color="normal")
+            
             # ---------- WARNINGS ----------
             warnings = []
             for col in df_preview.columns:
                 if df_preview[col].nunique() > 50:
-                    warnings.append(f"⚠ Column '{col}' has >50 unique values")
+                    warnings.append(f"Column '{col}' has >50 unique values")
                 if df_preview[col].isna().sum() / rows * 100 > 50:
-                    warnings.append(f"⚠ Column '{col}' has >50% missing values")
+                    warnings.append(f"Column '{col}' has >50% missing values")
             if warnings:
                 st.markdown("### ⚠ Warnings")
                 for w in warnings:
                     st.warning(w)
             else:
                 st.success("No major warnings detected ✅")
+
+            # ---------- FILE HEALTH SCORE ----------
+            st.markdown("### 🩺 File Health Score")
+            health_score = completeness
+            if warnings:
+                health_score -= len(warnings) * 2  # penalty per warning
+            health_score = max(0, min(100, health_score))  # clamp 0-100
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("✅ Completeness (%)", completeness)
+            col2.metric("🔢 Numeric/Categorical Ratio", f"{numeric_count}/{categorical_count}")
+            col3.metric("⚠ Warnings", len(warnings))
+
+            # Color-coded health bar
+            st.markdown(
+                f"""
+                <div style='background-color:#ddd; width:100%; height:25px; border-radius:5px;'>
+                    <div style='background-color:{"#4CAF50" if health_score>70 else "#FFA500" if health_score>40 else "#FF4B4B"};
+                                width:{health_score}%; height:25px; border-radius:5px; text-align:center; color:white; line-height:25px;'>
+                        Health: {health_score}%
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
             # ---------- COLUMN MIN/MAX ----------
             st.markdown("### 📌 Column Min/Max")
