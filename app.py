@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+import seaborn as sns
+from parser import analyze_file  # or your phraiser.py
+import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -12,13 +16,13 @@ st.set_page_config(
 
 # ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload CSV, Excel, or JSON to view dataset insights.")
+st.markdown("Upload a CSV, Excel, or JSON file to generate dataset insights.")
+st.markdown("---")
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
+    st.header("⚙ Settings")
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
-    show_graphs = st.checkbox("Show Column Graphs", True)
-    show_corr = st.checkbox("Show Correlation Analysis", True)
 
 # ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
@@ -34,74 +38,85 @@ if uploaded_file:
         st.error("Unsupported file type!")
         st.stop()
 
-    # ---------- FILE PREVIEW ----------
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- DATASET METRICS ----------
-    st.markdown("## 📊 Dataset Metrics")
-    rows, cols = df.shape
+    # ---------- METRICS ----------
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
     categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+
+    st.markdown("## 📊 Dataset Metrics")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Rows", rows)
-    c2.metric("Columns", cols)
+    c1.metric("Rows", df.shape[0])
+    c2.metric("Columns", df.shape[1])
     c3.metric("Numeric Columns", len(numeric_cols))
     c4.metric("Categorical Columns", len(categorical_cols))
 
     # ---------- COLUMN DATATYPES ----------
     st.markdown("## 📌 Column Datatypes")
-    col_types_df = pd.DataFrame({'Column': df.columns, 'Type': df.dtypes.astype(str)})
-    st.table(col_types_df)
+    col_df = pd.DataFrame({"Column": df.columns, "Datatype": df.dtypes.astype(str)})
+    st.dataframe(col_df, use_container_width=True)
 
-    # ---------- MIN/MAX/AVG NON-INTERACTIVE BARS ----------
+    # ---------- MIN / AVG / MAX GRADIENT BAR ----------
     st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
     for col in numeric_cols:
         min_val = df[col].min()
         avg_val = df[col].mean()
         max_val = df[col].max()
-        bar_total = max_val if max_val != 0 else 1
+
+        min_norm = 0.33
+        avg_norm = 0.33
+        max_norm = 0.34
 
         st.markdown(f"**{col}**")
-        # Using st.progress to simulate gradient (non-interactive)
-        st.progress(min_val / bar_total)
-        st.progress(avg_val / bar_total)
-        st.progress(max_val / bar_total)
-        st.text("Red: Min, Yellow: Avg, Green: Max")  # descriptive text only
+        st.markdown(f"""
+        <div style="display:flex; gap:4px; margin-bottom:4px;">
+            <div style="flex:{min_norm}; background:linear-gradient(to right, #ff4b4b, #ff9999); height:20px;"></div>
+            <div style="flex:{avg_norm}; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
+            <div style="flex:{max_norm}; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
+        </div>
+        <div style="margin-bottom:10px;">Red: Min | Yellow: Avg | Green: Max</div>
+        """, unsafe_allow_html=True)
 
-    # ---------- INTERACTIVE COLUMN GRAPHS ----------
-    if show_graphs and numeric_cols:
-        with st.expander("📊 Column Graphs", expanded=True):
-            for col in numeric_cols:
-                fig = px.line(df, y=col, title=f"{col} Trend", markers=True)
-                st.plotly_chart(fig, use_container_width=True)
+    # ---------- COLUMN GRAPHS (INTERACTIVE) ----------
+    with st.expander("📊 Column Graphs", expanded=False):
+        for col in numeric_cols:
+            fig = px.line(df, y=col, title=f"{col} Trend")
+            st.plotly_chart(fig, use_container_width=True)
 
-    # ---------- INTERACTIVE CORRELATION HEATMAP ----------
-    if show_corr and len(numeric_cols) > 1:
-        with st.expander("🔗 Correlation Heatmap", expanded=True):
-            corr = df[numeric_cols].corr().round(2)
+    # ---------- CORRELATION ----------
+    if len(numeric_cols) > 1:
+        corr = df[numeric_cols].corr().round(2)
+        with st.expander("🔥 Correlation Heatmap & Table", expanded=False):
+            st.markdown("### Correlation Heatmap")
             fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
             st.plotly_chart(fig, use_container_width=True)
+
             st.markdown("### Correlation Table")
             st.dataframe(corr, use_container_width=True)
 
-    # ---------- MISSING VALUE WARNINGS ----------
-    st.markdown("## ⚠ Missing Values % per Column")
+    # ---------- WARNINGS ----------
+    st.markdown("## ⚠ Warnings (% Missing Values)")
     missing_pct = (df.isna().sum() / len(df) * 100).round(2)
     st.dataframe(missing_pct, use_container_width=True)
 
-    # ---------- ML READINESS SCORE NON-INTERACTIVE ----------
-    completeness = round(100 - missing_pct.mean(), 2)
-    duplicate_pct = round(df.duplicated().mean() * 100, 2)
-    ml_ready_score = round(
+    # ---------- ML READINESS SCORE & ALGORITHMS ----------
+    st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
+    completeness = 100 - missing_pct.mean()
+    duplicate_pct = df.duplicated().mean() * 100
+    ml_score = round(
         (completeness * 0.4) + ((100 - duplicate_pct) * 0.3) +
         (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
         (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15), 2
     )
 
-    st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-    st.progress(ml_ready_score / 100)  # non-interactive
-    st.text(f"ML Readiness Score: {ml_ready_score}/100")
-    st.markdown("- Regression: Linear Regression, Random Forest, Gradient Boosting")
-    st.markdown("- Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression")
-    st.markdown("- Unsupervised/Clustering: KMeans, DBSCAN, Hierarchical Clustering")
+    st.markdown(f"""
+    <div style="background:linear-gradient(to right, #00ccff, #0066ff); width:100%; height:20px; border-radius:5px; margin-bottom:5px;"></div>
+    <p>ML Readiness Score: {ml_score}/100</p>
+    <p>Suggested Algorithms:</p>
+    <ul>
+        {"<li>Regression: Linear Regression, Random Forest, Gradient Boosting</li>" if numeric_cols else ""}
+        {"<li>Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression</li>" if categorical_cols else ""}
+        {"<li>Clustering: KMeans, DBSCAN, Hierarchical Clustering</li>" if numeric_cols and not categorical_cols else ""}
+    </ul>
+    """, unsafe_allow_html=True)
