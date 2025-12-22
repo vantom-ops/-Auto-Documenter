@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
@@ -76,30 +76,43 @@ if uploaded_file:
         st.write("- Clustering: KMeans, DBSCAN, Hierarchical Clustering")
 
     # ---------- COLUMN GRAPHS ----------
-    st.markdown("## 📈 Column Graphs (Min, Max, Avg)")
+    st.markdown("## 📈 Column Graphs (Min → Avg → Max Gradient)")
     for col in numeric_cols:
         col_min = df[col].min()
         col_max = df[col].max()
         col_avg = round(df[col].mean(), 2)
 
-        st.markdown(f"### {col}: Min={col_min}, Max={col_max}, Avg={col_avg}")
-        fig, ax = plt.subplots(figsize=(8, 3))
-        ax.plot(df[col], marker='o', linestyle='-', label=col)
-        ax.axhline(col_min, color='red', linestyle='--', label=f'Min={col_min}')
-        ax.axhline(col_max, color='green', linestyle='--', label=f'Max={col_max}')
-        ax.axhline(col_avg, color='blue', linestyle='-.', label=f'Avg={col_avg}')
-        ax.set_title(f"{col} Min/Max/Avg")
-        ax.set_xlabel("Index")
-        ax.set_ylabel(col)
-        ax.legend()
-        st.pyplot(fig)
-        plt.close(fig)
+        st.markdown(f"### {col}: Min={col_min}, Avg={col_avg}, Max={col_max}")
+
+        # Gradient colored bar
+        gradient_colors = ['#ff4d4d', '#ffd11a', '#33cc33']  # red → yellow → green
+        fig = go.Figure(go.Bar(
+            x=df.index,
+            y=df[col],
+            marker=dict(
+                color=df[col],
+                colorscale=gradient_colors,
+                colorbar=dict(title=col)
+            )
+        ))
+        fig.update_layout(
+            yaxis_title=col,
+            xaxis_title="Index",
+            template="plotly_white",
+            height=350
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     # ---------- CORRELATION HEATMAP ----------
     if len(numeric_cols) > 1:
         st.markdown("## 🔗 Correlation Heatmap")
         corr = df[numeric_cols].corr().round(2)
-        fig, ax = plt.subplots(figsize=(8, 5))
-        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
-        st.pyplot(fig)
-        plt.close(fig)
+        fig = px.imshow(
+            corr,
+            text_auto=True,
+            color_continuous_scale='RdBu_r',
+            zmin=-1, zmax=1,
+            labels=dict(color="Correlation")
+        )
+        fig.update_layout(height=500, width=800)
+        st.plotly_chart(fig, use_container_width=True)
