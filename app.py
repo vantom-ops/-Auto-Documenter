@@ -4,7 +4,11 @@ import numpy as np
 import plotly.express as px
 
 # ---------- PAGE CONFIG ----------
-st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="📄 Auto-Documenter",
+    page_icon="📊",
+    layout="wide"
+)
 
 # ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
@@ -56,30 +60,30 @@ if uploaded_file:
         min_val = df[col].min()
         avg_val = df[col].mean()
         max_val = df[col].max()
-
-        # Non-interactive gradient bar using st.progress with description text
         bar_total = max_val if max_val != 0 else 1
+
         st.markdown(f"**{col}**")
-        st.progress(min_val / bar_total)  # Red portion
-        st.progress(avg_val / bar_total)  # Yellow portion
-        st.progress(max_val / bar_total)  # Green portion
+        # Using st.progress to simulate gradient (non-interactive)
+        st.progress(min_val / bar_total)
+        st.progress(avg_val / bar_total)
+        st.progress(max_val / bar_total)
         st.text("Red: Min, Yellow: Avg, Green: Max")  # descriptive text only
 
     # ---------- INTERACTIVE COLUMN GRAPHS ----------
     if show_graphs and numeric_cols:
-        st.markdown("## 📊 Column Graphs")
-        for col in numeric_cols:
-            fig = px.line(df, y=col, title=f"{col} Trend", markers=True)
-            st.plotly_chart(fig, use_container_width=True)
+        with st.expander("📊 Column Graphs", expanded=True):
+            for col in numeric_cols:
+                fig = px.line(df, y=col, title=f"{col} Trend", markers=True)
+                st.plotly_chart(fig, use_container_width=True)
 
     # ---------- INTERACTIVE CORRELATION HEATMAP ----------
     if show_corr and len(numeric_cols) > 1:
-        st.markdown("## 🔗 Correlation Heatmap")
-        corr = df[numeric_cols].corr().round(2)
-        fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown("### Correlation Table")
-        st.dataframe(corr, use_container_width=True)
+        with st.expander("🔗 Correlation Heatmap", expanded=True):
+            corr = df[numeric_cols].corr().round(2)
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("### Correlation Table")
+            st.dataframe(corr, use_container_width=True)
 
     # ---------- MISSING VALUE WARNINGS ----------
     st.markdown("## ⚠ Missing Values % per Column")
