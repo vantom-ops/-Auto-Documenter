@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from fpdf import FPDF
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
@@ -14,27 +15,21 @@ def analyze_file(file_path):
         # ---------- READ FILE ----------
         if ext == ".csv":
             df = pd.read_csv(file_path, low_memory=False)
-
         elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
-
         elif ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             df = pd.json_normalize(data)
-
         elif ext == ".py":
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
-
             readme_path = "output/README.md"
             with open(readme_path, "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
-
             return {"file": file_name, "type": "python", "dataframe": pd.DataFrame()}
-
         else:
             return {"error": "Unsupported file type"}
 
@@ -45,6 +40,19 @@ def analyze_file(file_path):
             "column_names": list(df.columns)
         }
 
+        # ---------- FILE HEALTH ----------
+        total_cells = df.size
+        missing_cells = df.isna().sum().sum()
+        completeness = round(((total_cells - missing_cells) / total_cells) * 100, 2)
+        numeric_count = len(df.select_dtypes(include=['number']).columns)
+        categorical_count = len(df.select_dtypes(exclude=['number']).columns)
+        numeric_ratio = round((numeric_count / df.shape[1]) * 100, 2)
+        categorical_ratio = round((categorical_count / df.shape[1]) * 100, 2)
+        warnings = []
+        for col in df.columns:
+            if df[col].nunique() > 50:
+                warnings.append(col)
+
         # ---------- INIT README ----------
         readme_path = "output/README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
@@ -52,7 +60,13 @@ def analyze_file(file_path):
             f.write(f"File Name: {file_name}\n\n")
             f.write(f"Total Rows: {summary['rows']}\n")
             f.write(f"Total Columns: {summary['columns']}\n\n")
-            f.write("COLUMN INSIGHTS\n\n")
+            f.write("FILE HEALTH\n")
+            f.write(f"Completeness: {completeness}%\n")
+            f.write(f"Numeric Columns: {numeric_count} ({numeric_ratio}%)\n")
+            f.write(f"Categorical Columns: {categorical_count} ({categorical_ratio}%)\n")
+            if warnings:
+                f.write(f"Warnings: Columns with >50 unique values: {', '.join(warnings)}\n")
+            f.write("\nCOLUMN INSIGHTS\n\n")
 
         # ---------- INIT PDF ----------
         pdf = FPDF()
@@ -65,6 +79,17 @@ def analyze_file(file_path):
         pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
         pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
         pdf.ln(6)
+
+        # ---------- PDF FILE HEALTH ----------
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "FILE HEALTH", ln=True)
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 8, f"Completeness: {completeness}%", ln=True)
+        pdf.cell(0, 8, f"Numeric Columns: {numeric_count} ({numeric_ratio}%)", ln=True)
+        pdf.cell(0, 8, f"Categorical Columns: {categorical_count} ({categorical_ratio}%)", ln=True)
+        if warnings:
+            pdf.multi_cell(0, 8, f"Warnings: Columns with >50 unique values: {', '.join(warnings)}")
+        pdf.ln(4)
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
@@ -104,13 +129,13 @@ def analyze_file(file_path):
             )
             pdf.ln(2)
 
-            # If numeric column, add graph + min/max
+            # Numeric columns: min/max + graph
             if col in numeric_cols:
                 series = df[col]
                 min_value = series.min()
                 max_value = series.max()
 
-                # ---------- Graph ----------
+                # Line graph
                 plt.figure(figsize=(8, 4))
                 plt.plot(series, marker='o', label=col)
                 plt.axhline(min_value, color='red', linestyle='--', label=f'Min: {min_value}')
@@ -143,11 +168,33 @@ def analyze_file(file_path):
                 pdf.image(graph_file, x=10, y=None, w=180)
                 pdf.ln(5)
 
+        # ---------- CORRELATION HEATMAP ----------
+        if len(numeric_cols) > 1:
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(df[numeric_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f")
+            plt.title("Correlation Heatmap")
+            heatmap_file = "output/correlation_heatmap.png"
+            plt.savefig(heatmap_file)
+            plt.close()
+            pdf.set_font("Arial", "B", 14)
+            pdf.cell(0, 10, "CORRELATION HEATMAP", ln=True)
+            pdf.image(heatmap_file, x=10, y=None, w=180)
+            pdf.ln(5)
+
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        # Return the dataframe for Step 5 preview
-        return {"summary": summary, "graphs": graph_paths, "dataframe": df}
+        return {
+            "summary": summary,
+            "graphs": graph_paths,
+            "dataframe": df,
+            "completeness": completeness,
+            "numeric_count": numeric_count,
+            "categorical_count": categorical_count,
+            "numeric_ratio": numeric_ratio,
+            "categorical_ratio": categorical_ratio,
+            "warnings": warnings
+        }
 
     except Exception as e:
         return {"error": str(e)}
