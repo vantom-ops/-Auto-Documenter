@@ -48,16 +48,59 @@ if uploaded_file:
 
     # ---------- COLUMN DATATYPES ----------
     st.markdown("## 📌 Column Datatypes")
-    col_types = pd.Series(df.dtypes).astype(str)
-    for col, dtype in col_types.items():
-        st.write(f"- **{col}**: {dtype}")
+    col_types_df = pd.DataFrame({'Column': df.columns, 'Type': df.dtypes.astype(str)})
+    st.dataframe(col_types_df.T, use_container_width=True)  # Transpose for side-by-side view
 
     # ---------- MISSING VALUES ----------
     st.markdown("## ⚠ Missing Values % per Column")
     missing_pct = (df.isna().sum() / len(df) * 100).round(2)
     st.dataframe(missing_pct, use_container_width=True)
 
+    # ---------- COLUMN GRAPHS ----------
+    with st.expander("📈 Column Graphs (Min → Avg → Max Gradient)"):
+        for col in numeric_cols:
+            col_min = df[col].min()
+            col_max = df[col].max()
+            col_avg = round(df[col].mean(), 2)
+
+            with st.expander(f"{col} (Click to expand min/max details)"):
+                st.markdown(f"**Average:** {col_avg}")
+                # Gradient horizontal bar for Min → Avg → Max
+                bar_fig = go.Figure(go.Bar(
+                    x=[col_avg],
+                    y=[col],
+                    orientation='h',
+                    marker=dict(
+                        color=[col_avg],
+                        colorscale=[[0, 'red'], [0.5, 'yellow'], [1, 'green']],
+                        cmin=col_min,
+                        cmax=col_max,
+                        colorbar=dict(title="Value")
+                    )
+                ))
+                bar_fig.update_layout(xaxis_title="Value", yaxis_title="", height=100, margin=dict(l=20, r=20, t=20, b=20))
+                st.plotly_chart(bar_fig, use_container_width=True)
+
+                st.markdown(f"Min: {col_min} | Max: {col_max}")
+
+    # ---------- CORRELATION HEATMAP ----------
+    if len(numeric_cols) > 1:
+        with st.expander("🔗 Correlation Heatmap"):
+            corr = df[numeric_cols].corr().round(2)
+            st.dataframe(corr, use_container_width=True)
+
+            fig = px.imshow(
+                corr,
+                text_auto=True,
+                color_continuous_scale='RdBu_r',
+                zmin=-1, zmax=1,
+                labels=dict(color="Correlation")
+            )
+            fig.update_layout(height=500, width=800)
+            st.plotly_chart(fig, use_container_width=True)
+
     # ---------- ML READINESS SCORE ----------
+    st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
     completeness = round(100 - missing_pct.mean(), 2)
     duplicate_pct = round(df.duplicated().mean() * 100, 2)
     ml_ready_score = round(
@@ -66,53 +109,28 @@ if uploaded_file:
         (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
         2
     )
-    st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-    st.metric("ML Readiness Score", f"{ml_ready_score}/100")
+
+    # Gradient bar for ML score
+    score_fig = go.Figure(go.Bar(
+        x=[ml_ready_score],
+        y=["ML Readiness"],
+        orientation='h',
+        marker=dict(
+            color=[ml_ready_score],
+            colorscale=[[0, 'red'], [0.5, 'yellow'], [1, 'green']],
+            cmin=0,
+            cmax=100,
+            colorbar=dict(title="Score")
+        )
+    ))
+    score_fig.update_layout(xaxis_title="Score /100", yaxis_title="", height=100, margin=dict(l=20, r=20, t=20, b=20))
+    st.plotly_chart(score_fig, use_container_width=True)
+
+    # Suggested algorithms
+    st.markdown("**Suggested Algorithms:**")
     if numeric_cols and len(numeric_cols) > 1:
         st.write("- Regression: Linear Regression, Random Forest Regressor, Gradient Boosting")
     if categorical_cols:
         st.write("- Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression")
     if numeric_cols and not categorical_cols:
         st.write("- Clustering: KMeans, DBSCAN, Hierarchical Clustering")
-
-    # ---------- COLUMN GRAPHS ----------
-    st.markdown("## 📈 Column Graphs (Min → Avg → Max Gradient)")
-    for col in numeric_cols:
-        col_min = df[col].min()
-        col_max = df[col].max()
-        col_avg = round(df[col].mean(), 2)
-
-        st.markdown(f"### {col}: Min={col_min}, Avg={col_avg}, Max={col_max}")
-
-        # Gradient colored bar
-        gradient_colors = ['#ff4d4d', '#ffd11a', '#33cc33']  # red → yellow → green
-        fig = go.Figure(go.Bar(
-            x=df.index,
-            y=df[col],
-            marker=dict(
-                color=df[col],
-                colorscale=gradient_colors,
-                colorbar=dict(title=col)
-            )
-        ))
-        fig.update_layout(
-            yaxis_title=col,
-            xaxis_title="Index",
-            template="plotly_white",
-            height=350
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ---------- CORRELATION HEATMAP ----------
-    if len(numeric_cols) > 1:
-        st.markdown("## 🔗 Correlation Heatmap")
-        corr = df[numeric_cols].corr().round(2)
-        fig = px.imshow(
-            corr,
-            text_auto=True,
-            color_continuous_scale='RdBu_r',
-            zmin=-1, zmax=1,
-            labels=dict(color="Correlation")
-        )
-        fig.update_layout(height=500, width=800)
-        st.plotly_chart(fig, use_container_width=True)
