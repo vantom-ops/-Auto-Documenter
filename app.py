@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
 from parser import analyze_file  # your phraiser.py or parser.py
 import io
-import os
-import plotly.express as px
-import plotly.graph_objects as go
 from fpdf import FPDF
-import seaborn as sns
+import plotly.express as px
+from textwrap import wrap
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -133,7 +132,9 @@ if uploaded_file:
 
         # Dataset metrics
         pdf.set_font("Arial", "", 12)
-        pdf.multi_cell(0, 6, f"Rows: {result['summary']['rows']}\nColumns: {result['summary']['columns']}\nNumeric: {result['numeric_count']}\nCategorical: {result['categorical_count']}\n")
+        metrics_text = f"Rows: {result['summary']['rows']}\nColumns: {result['summary']['columns']}\nNumeric: {result['numeric_count']}\nCategorical: {result['categorical_count']}\n"
+        for line in wrap(metrics_text, width=90):
+            pdf.multi_cell(0, 6, line)
         pdf.ln(2)
 
         # Column stats
@@ -141,7 +142,9 @@ if uploaded_file:
         pdf.cell(0, 8, "Column Statistics (Min, Max, Avg)", ln=True)
         pdf.set_font("Arial", "", 12)
         for _, row in col_stats.iterrows():
-            pdf.multi_cell(0, 6, f"{row['Column']}: Min={row['Min']}, Max={row['Max']}, Avg={row['Avg']}")
+            line = f"{row['Column']}: Min={row['Min']}, Max={row['Max']}, Avg={row['Avg']}"
+            for wrapped_line in wrap(line, width=90):
+                pdf.multi_cell(0, 6, wrapped_line)
 
         # Correlation table
         if len(numeric_cols) > 1:
@@ -151,7 +154,8 @@ if uploaded_file:
             pdf.set_font("Arial", "", 12)
             for i in corr.index:
                 line = ", ".join([f"{j}: {corr.loc[i,j]}" for j in corr.columns])
-                pdf.multi_cell(0, 6, f"{i}: {line}")
+                for wrapped_line in wrap(f"{i}: {line}", width=90):
+                    pdf.multi_cell(0, 6, wrapped_line)
 
         # Warnings
         pdf.ln(2)
@@ -159,7 +163,8 @@ if uploaded_file:
         pdf.cell(0, 8, "Warnings (Missing %)", ln=True)
         pdf.set_font("Arial", "", 12)
         for col, pct in missing_pct.items():
-            pdf.multi_cell(0, 6, f"{col}: {pct}%")
+            for wrapped_line in wrap(f"{col}: {pct}%", width=90):
+                pdf.multi_cell(0, 6, wrapped_line)
 
         # ML readiness
         pdf.ln(2)
@@ -167,16 +172,20 @@ if uploaded_file:
         pdf.cell(0, 8, f"ML Readiness Score: {ml_ready_score}/100", ln=True)
         pdf.set_font("Arial", "", 12)
         if numeric_cols and len(numeric_cols) > 1:
-            pdf.multi_cell(0, 6, "Suggested Regression Algorithms: Linear Regression, Random Forest Regressor, Gradient Boosting")
+            for wrapped_line in wrap("Suggested Regression Algorithms: Linear Regression, Random Forest Regressor, Gradient Boosting", width=90):
+                pdf.multi_cell(0, 6, wrapped_line)
         if categorical_cols:
-            pdf.multi_cell(0, 6, "Suggested Classification Algorithms: Decision Tree, Random Forest, XGBoost, Logistic Regression")
+            for wrapped_line in wrap("Suggested Classification Algorithms: Decision Tree, Random Forest, XGBoost, Logistic Regression", width=90):
+                pdf.multi_cell(0, 6, wrapped_line)
         if numeric_cols and not categorical_cols:
-            pdf.multi_cell(0, 6, "Suggested Unsupervised/Clustering Algorithms: KMeans, DBSCAN, Hierarchical Clustering")
+            for wrapped_line in wrap("Suggested Unsupervised/Clustering Algorithms: KMeans, DBSCAN, Hierarchical Clustering", width=90):
+                pdf.multi_cell(0, 6, wrapped_line)
 
         # Save PDF
         pdf_path = os.path.join("output", "report.pdf")
         pdf.output(pdf_path)
 
+        # Download button
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
                 pdf_bytes = f.read()
