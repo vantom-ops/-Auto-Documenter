@@ -1,234 +1,176 @@
-import streamlit as st
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import plotly.express as px
-import plotly.graph_objects as go
-from parser import analyze_file
 import os
+import pandas as pd
+import json
+from fpdf import FPDF
+import matplotlib.pyplot as plt
 import numpy as np
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="📄 Auto-Documenter",
-    page_icon="📊",
-    layout="wide"
-)
+def analyze_file(file_path):
+    os.makedirs("output", exist_ok=True)
 
-# ---------- HEADER ----------
-st.markdown("# 📄 Auto-Documenter")
-st.markdown(
-    "Upload a CSV, Excel, JSON, or Python file to automatically generate documentation."
-)
-st.markdown("---")
+    file_name = os.path.basename(file_path)
+    ext = os.path.splitext(file_name)[1].lower()
 
-# ---------- SIDEBAR ----------
-with st.sidebar:
-    st.header("⚙ Settings")
-    preview_rows = st.slider("Preview Rows", 5, 50, 10)
-    show_graphs = st.checkbox("Show Column Graphs", True)
-    show_corr = st.checkbox("Show Correlation Analysis", True)
+    try:
+        # ---------- READ FILE ----------
+        if ext == ".csv":
+            df = pd.read_csv(file_path, low_memory=False)
 
-# ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader(
-    "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"]
-)
+        elif ext in [".xlsx", ".xls"]:
+            df = pd.read_excel(file_path)
 
-if uploaded_file:
+        elif ext == ".json":
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            df = pd.json_normalize(data)
 
-    # ---------- LOAD FILE ----------
-    if uploaded_file.name.endswith(".csv"):
-        df_preview = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith((".xlsx", ".xls")):
-        df_preview = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith(".json"):
-        df_preview = pd.read_json(uploaded_file)
-    else:
-        df_preview = pd.DataFrame()
+        elif ext == ".py":
+            with open(file_path, "r", encoding="utf-8") as f:
+                code = f.read()
 
-    # ---------- FILE PREVIEW ----------
-    if not df_preview.empty:
-        st.markdown("## 🔍 File Preview")
-        st.dataframe(df_preview.head(preview_rows), use_container_width=True)
+            with open("output/README.md", "w", encoding="utf-8") as f:
+                f.write("AUTO GENERATED DOCUMENTATION\n\n")
+                f.write("PYTHON FILE\n\n")
+                f.write(code)
 
-    # ---------- GENERATE ----------
-    if st.button("🚀 Generate Documentation"):
-        with st.spinner("Processing file..."):
-            os.makedirs("temp_upload", exist_ok=True)
-            temp_path = os.path.join("temp_upload", uploaded_file.name)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            result = analyze_file(temp_path)
+            return {"file": file_name, "type": "python"}
 
-        if "error" in result:
-            st.error(result["error"])
-            st.stop()
+        else:
+            return {"error": "Unsupported file type"}
 
-        st.success("✅ Documentation generated successfully!")
+        # ---------- BASIC STATS ----------
+        rows, cols = df.shape
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
-        # ---------- BASIC METRICS ----------
-        rows, cols = df_preview.shape
-        numeric_cols = df_preview.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df_preview.select_dtypes(exclude=np.number).columns.tolist()
+        completeness = round((df.notna().sum().sum() / (rows * cols)) * 100, 2)
+        duplicate_pct = round((df.duplicated().sum() / rows) * 100, 2)
 
-        completeness = round((df_preview.notna().sum().sum() / (rows * cols)) * 100, 2)
-        missing_pct = round(100 - completeness, 2)
-        duplicate_pct = round((df_preview.duplicated().sum() / rows) * 100, 2)
+        high_missing_cols = [
+            col for col in df.columns if df[col].isna().mean() * 100 > 50
+        ]
 
-        # ---------- METRIC CARDS ----------
-        st.markdown("## 📊 Dataset Metrics")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", rows)
-        c2.metric("Columns", cols)
-        c3.metric("Numeric", len(numeric_cols))
-        c4.metric("Categorical", len(categorical_cols))
-
-        # ---------- COMPLETENESS ----------
-        st.markdown("### ✅ Data Completeness")
-        st.progress(completeness / 100)
-        st.caption(f"{completeness}% complete")
-
-        # ---------- WARNINGS ----------
-        st.markdown("## ⚠ Data Health Warnings")
-        high_missing_cols = []
-        high_card_cols = []
-
-        for col in df_preview.columns:
-            miss = df_preview[col].isna().mean() * 100
-            uniq = df_preview[col].nunique()
-
-            if miss > 50:
-                high_missing_cols.append(col)
-                st.markdown(f"**{col} – Missing Values**")
-                st.progress(miss / 100)
-                st.caption(f"{round(miss,2)}% missing")
-
-            if uniq > 50:
-                high_card_cols.append(col)
-                st.markdown(f"**{col} – High Cardinality**")
-                st.progress(min(uniq / rows, 1.0))
-                st.caption(f"{uniq} unique values")
-
-        if not high_missing_cols and not high_card_cols:
-            st.success("🎉 No major data issues detected")
-
-        # ---------- MIN / MAX / AVG ----------
-        if numeric_cols:
-            st.markdown("## 📌 Column Statistics")
-            grid = st.columns(3)
-            i = 0
-            for col in numeric_cols:
-                with grid[i % 3]:
-                    st.markdown(
-                        f"""
-                        <div style="padding:15px;border-radius:14px;
-                        background:linear-gradient(135deg,#283c86,#45a247);
-                        color:white;">
-                        <h4>{col}</h4>
-                        <p>⬇ Min: {df_preview[col].min()}</p>
-                        <p>⬆ Max: {df_preview[col].max()}</p>
-                        <p>📊 Avg: {round(df_preview[col].mean(),2)}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                i += 1
-
-        # ---------- COLUMN GRAPHS ----------
-        if show_graphs and numeric_cols:
-            st.markdown("## 📈 Column Graphs")
-            for col in numeric_cols:
-                fig = px.line(df_preview, y=col, title=f"{col} Trend")
-                st.plotly_chart(fig, use_container_width=True)
-
-        # ---------- CORRELATION ----------
+        # ---------- STRONG CORRELATIONS ----------
         strong_corrs = []
-        if show_corr and len(numeric_cols) > 1:
-            st.markdown("## 🔥 Correlation Analysis")
-
-            corr = df_preview[numeric_cols].corr().round(3)
-
-            fig = px.imshow(
-                corr,
-                text_auto=True,
-                color_continuous_scale="RdBu_r"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("### 📋 Correlation Table")
-            st.dataframe(corr, use_container_width=True)
-
+        if len(numeric_cols) > 1:
+            corr = df[numeric_cols].corr()
             for i in corr.columns:
                 for j in corr.columns:
                     if i != j and abs(corr.loc[i, j]) > 0.7:
-                        strong_corrs.append((i, j, corr.loc[i, j]))
+                        strong_corrs.append((i, j, round(corr.loc[i, j], 3)))
 
-        # ---------- STRONG CORRELATIONS ----------
-        if strong_corrs:
-            st.markdown("## 🔗 Strong Correlations (> 0.7)")
-            for a, b, v in strong_corrs:
-                st.warning(f"**{a} ↔ {b} : {v}**")
-
-        # ---------- RADAR CHART (DATA HEALTH) ----------
-        st.markdown("## 🕸 Data Health Radar")
-
-        radar_labels = [
-            "Completeness",
-            "Low Missing",
-            "Low Duplicates",
-            "Numeric Balance",
-            "Categorical Balance"
-        ]
-
-        radar_values = [
-            completeness,
-            100 - (len(high_missing_cols) / cols * 100 if cols else 0),
-            100 - duplicate_pct,
-            min((len(numeric_cols) / cols) * 100, 100),
-            min((len(categorical_cols) / cols) * 100, 100)
-        ]
-
-        radar_fig = go.Figure(
-            data=[
-                go.Scatterpolar(
-                    r=radar_values,
-                    theta=radar_labels,
-                    fill='toself'
-                )
-            ]
+        # ---------- MODEL READINESS SCORE ----------
+        model_readiness = round(
+            (completeness * 0.5) +
+            ((100 - duplicate_pct) * 0.2) +
+            (min(len(numeric_cols) / cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols) / cols, 1) * 100 * 0.15),
+            2
         )
-        radar_fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0,100])))
-        st.plotly_chart(radar_fig, use_container_width=True)
 
-        # ---------- AUTO INSIGHTS ----------
-        st.markdown("## 🤖 Auto Insights")
+        # ---------- ML ALGORITHM SUGGESTION ----------
+        ml_suggestions = []
 
-        insights = []
-        if completeness < 80:
-            insights.append("⚠ Dataset has low completeness; missing values may affect analysis.")
-        if high_missing_cols:
-            insights.append(f"⚠ Columns with heavy missing data: {', '.join(high_missing_cols)}.")
-        if strong_corrs:
-            insights.append("🔗 Strong correlations detected; consider multicollinearity checks.")
+        if rows < 5000:
+            ml_suggestions.append("Linear Regression / Logistic Regression")
+
         if len(numeric_cols) > len(categorical_cols):
-            insights.append("📊 Dataset is numerically heavy; suitable for statistical modeling.")
-        if len(categorical_cols) > len(numeric_cols):
-            insights.append("🗂 Dataset is categorical dominant; encoding may be required.")
+            ml_suggestions.append("Random Forest")
+            ml_suggestions.append("Gradient Boosting (XGBoost-style)")
 
-        if insights:
-            for i in insights:
-                st.info(i)
+        if strong_corrs:
+            ml_suggestions.append("Regularized Models (Ridge / Lasso)")
+
+        if len(numeric_cols) >= 3 and len(categorical_cols) == 0:
+            ml_suggestions.append("K-Means Clustering")
+
+        ml_suggestions = list(set(ml_suggestions))
+
+        # ---------- FEATURE IMPORTANCE (SIMULATION) ----------
+        feature_importance = {}
+        if numeric_cols:
+            variances = df[numeric_cols].var().sort_values(ascending=False)
+            total_var = variances.sum()
+
+            for col, var in variances.items():
+                importance = round((var / total_var) * 100, 2) if total_var != 0 else 0
+                feature_importance[col] = importance
+
+        # ---------- EXECUTIVE SUMMARY ----------
+        exec_summary = f"""
+This dataset contains {rows} rows and {cols} columns.
+Overall completeness is {completeness}% with {duplicate_pct}% duplicate rows.
+
+Numeric Features: {len(numeric_cols)}
+Categorical Features: {len(categorical_cols)}
+
+Model Readiness Score: {model_readiness}/100.
+"""
+
+        if high_missing_cols:
+            exec_summary += f"\nHigh missing columns detected: {', '.join(high_missing_cols)}."
+
+        if model_readiness >= 80:
+            exec_summary += "\nThe dataset is well-prepared for machine learning."
+        elif model_readiness >= 60:
+            exec_summary += "\nModerate data cleaning is recommended before modeling."
         else:
-            st.success("✅ Dataset looks clean and analysis-ready!")
+            exec_summary += "\nSignificant preprocessing is required before modeling."
 
-        # ---------- DOWNLOAD PDF ----------
-        pdf_path = "output/report.pdf"
-        if os.path.exists(pdf_path):
-            st.markdown("## 📥 Export")
-            st.download_button(
-                "Download PDF Report",
-                data=open(pdf_path, "rb").read(),
-                file_name="Auto_Documenter_Report.pdf",
-                mime="application/pdf"
-            )
+        # ---------- INIT PDF ----------
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "AUTO GENERATED DATA REPORT", ln=True)
+        pdf.ln(5)
+
+        # ---------- EXECUTIVE SUMMARY ----------
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Executive Summary", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(0, 8, exec_summary)
+
+        # ---------- MODEL READINESS ----------
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Model Readiness Assessment", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(
+            0, 8,
+            f"Model Readiness Score: {model_readiness}/100"
+        )
+
+        # ---------- ML SUGGESTIONS ----------
+        pdf.ln(4)
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Recommended ML Algorithms", ln=True)
+        pdf.set_font("Arial", "", 11)
+
+        for algo in ml_suggestions:
+            pdf.cell(0, 7, f"- {algo}", ln=True)
+
+        # ---------- FEATURE IMPORTANCE ----------
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Feature Importance (Simulated)", ln=True)
+        pdf.set_font("Arial", "", 11)
+
+        for col, score in feature_importance.items():
+            pdf.cell(0, 7, f"{col}: {score}%", ln=True)
+
+        # ---------- SAVE PDF ----------
+        pdf.output("output/report.pdf")
+
+        return {
+            "summary": {
+                "rows": rows,
+                "columns": cols,
+                "completeness": completeness,
+                "model_readiness": model_readiness
+            },
+            "ml_suggestions": ml_suggestions,
+            "feature_importance": feature_importance
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
