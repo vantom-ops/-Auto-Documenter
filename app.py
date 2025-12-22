@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
@@ -53,22 +50,19 @@ if uploaded_file:
     col_types_df = pd.DataFrame({'Column': df.columns, 'Type': df.dtypes.astype(str)})
     st.table(col_types_df)
 
-    # ---------- COLUMN MIN/MAX/AVG NON-INTERACTIVE ----------
+    # ---------- MIN/MAX/AVG NON-INTERACTIVE BARS ----------
     st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
     for col in numeric_cols:
         min_val = df[col].min()
         avg_val = df[col].mean()
         max_val = df[col].max()
 
-        fig, ax = plt.subplots(figsize=(6, 0.4))
-        ax.barh(0, min_val, color='red', label='Min')
-        ax.barh(0, avg_val-min_val, left=min_val, color='yellow', label='Avg')
-        ax.barh(0, max_val-avg_val, left=avg_val, color='green', label='Max')
-        ax.set_yticks([])
-        ax.set_xticks([])
-        ax.set_title(f"{col} (Min / Avg / Max)")
-        ax.legend(loc='upper right')
-        st.pyplot(fig)
+        # Non-interactive gradient bar using st.progress with description text
+        bar_total = max_val if max_val != 0 else 1
+        st.markdown(f"**{col}**")
+        st.progress(min_val / bar_total)  # Red portion
+        st.progress(avg_val / bar_total)  # Yellow portion
+        st.progress(max_val / bar_total)  # Green portion
         st.text("Red: Min, Yellow: Avg, Green: Max")  # descriptive text only
 
     # ---------- INTERACTIVE COLUMN GRAPHS ----------
@@ -102,13 +96,7 @@ if uploaded_file:
     )
 
     st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-    fig, ax = plt.subplots(figsize=(6, 0.4))
-    ax.barh(0, ml_ready_score, color='purple')
-    ax.set_yticks([])
-    ax.set_xticks([])
-    ax.set_xlim(0, 100)
-    ax.set_title("ML Readiness Score")
-    st.pyplot(fig)
+    st.progress(ml_ready_score / 100)  # non-interactive
     st.text(f"ML Readiness Score: {ml_ready_score}/100")
     st.markdown("- Regression: Linear Regression, Random Forest, Gradient Boosting")
     st.markdown("- Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression")
