@@ -38,25 +38,35 @@ def analyze_file(file_path):
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- BASIC SUMMARY ----------
-        total_cells = df.size
-        total_missing = df.isna().sum().sum()
-        completeness = round(((total_cells - total_missing) / total_cells) * 100, 2)
-
+        # ---------- COLUMN TYPES & COUNTS ----------
         numeric_cols = df.select_dtypes(include=['number']).columns
         categorical_cols = df.select_dtypes(exclude=['number']).columns
 
         numeric_count = len(numeric_cols)
         categorical_count = len(categorical_cols)
-
         numeric_ratio = round((numeric_count / len(df.columns)) * 100, 2)
         categorical_ratio = round((categorical_count / len(df.columns)) * 100, 2)
 
-        # Warnings
+        # ---------- BASIC SUMMARY ----------
+        total_cells = df.size
+        total_missing = df.isna().sum().sum()
+        completeness = round(((total_cells - total_missing) / total_cells) * 100, 2)
+
+        summary = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "column_names": list(df.columns),
+            "numeric_count": numeric_count,
+            "categorical_count": categorical_count,
+            "numeric_ratio": numeric_ratio,
+            "categorical_ratio": categorical_ratio,
+            "completeness": completeness
+        }
+
+        # ---------- Warnings ----------
         warnings = []
         high_missing_cols = df.columns[df.isna().mean() > 0.5].tolist()
         many_unique_cols = df.columns[df.nunique() > 50].tolist()
-
         if high_missing_cols:
             warnings.append(f"High missing data in columns: {', '.join(high_missing_cols)}")
         if many_unique_cols:
@@ -69,8 +79,8 @@ def analyze_file(file_path):
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write("AUTO GENERATED DOCUMENTATION\n\n")
             f.write(f"File Name: {file_name}\n\n")
-            f.write(f"Total Rows: {len(df)}\n")
-            f.write(f"Total Columns: {len(df.columns)}\n\n")
+            f.write(f"Total Rows: {summary['rows']}\n")
+            f.write(f"Total Columns: {summary['columns']}\n\n")
             f.write("COLUMN INSIGHTS\n\n")
 
         # ---------- INIT PDF ----------
@@ -81,15 +91,14 @@ def analyze_file(file_path):
         pdf.set_font("Arial", "", 12)
         pdf.ln(4)
         pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
-        pdf.cell(0, 8, f"Total Rows: {len(df)}", ln=True)
-        pdf.cell(0, 8, f"Total Columns: {len(df.columns)}", ln=True)
+        pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
+        pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
         pdf.ln(6)
-
-        # ---------- COLUMN INSIGHTS + GRAPHS ----------
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
 
+        # ---------- COLUMN INSIGHTS + GRAPHS ----------
         graph_paths = []
 
         for col in df.columns:
@@ -164,9 +173,9 @@ def analyze_file(file_path):
         # ---------- STEP 3: DATASET HEALTH SCORE ----------
         with open(readme_path, "a", encoding="utf-8") as f:
             f.write("\nDATASET HEALTH SCORE\n\n")
-            f.write(f"Completeness Score: {completeness}%\n")
-            f.write(f"Numeric Columns: {numeric_count} ({numeric_ratio}%)\n")
-            f.write(f"Categorical Columns: {categorical_count} ({categorical_ratio}%)\n")
+            f.write(f"Completeness Score: {summary['completeness']}%\n")
+            f.write(f"Numeric Columns: {summary['numeric_count']} ({summary['numeric_ratio']}%)\n")
+            f.write(f"Categorical Columns: {summary['categorical_count']} ({summary['categorical_ratio']}%)\n")
             f.write("Warnings:\n")
             for w in warnings:
                 f.write(f"- {w}\n")
@@ -174,9 +183,9 @@ def analyze_file(file_path):
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "DATASET HEALTH SCORE", ln=True)
         pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, f"Completeness Score: {completeness}%", ln=True)
-        pdf.cell(0, 8, f"Numeric Columns: {numeric_count} ({numeric_ratio}%)", ln=True)
-        pdf.cell(0, 8, f"Categorical Columns: {categorical_count} ({categorical_ratio}%)", ln=True)
+        pdf.cell(0, 8, f"Completeness Score: {summary['completeness']}%", ln=True)
+        pdf.cell(0, 8, f"Numeric Columns: {summary['numeric_count']} ({summary['numeric_ratio']}%)", ln=True)
+        pdf.cell(0, 8, f"Categorical Columns: {summary['categorical_count']} ({summary['categorical_ratio']}%)", ln=True)
         pdf.ln(4)
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, "Warnings:", ln=True)
@@ -188,7 +197,7 @@ def analyze_file(file_path):
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "completeness": completeness, "warnings": warnings}
+        return {"summary": summary, "graphs": graph_paths, "warnings": warnings}
 
     except Exception as e:
         return {"error": str(e)}
