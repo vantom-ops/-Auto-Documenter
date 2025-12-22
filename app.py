@@ -1,54 +1,46 @@
 import streamlit as st
 import os
-import sys
-
-# Add backend folder to path
-sys.path.append(os.path.join(os.path.dirname(__file__), "../backend"))
-from parser import analyze_file  # now works on Streamlit Cloud
-
-st.set_page_config(page_title="📄 Auto-Documenter", layout="wide")
+from parser import analyze_file
 
 st.title("📄 Auto-Documenter")
-st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-# File uploader
 uploaded_file = st.file_uploader(
-    "Choose a file",
+    "Upload a CSV, Excel, JSON, or Python file",
     type=["csv", "xlsx", "xls", "json", "py"]
 )
 
-if uploaded_file:
-    # Ensure output folder exists
-    os.makedirs("output", exist_ok=True)
-
+if uploaded_file is not None:
     # Save uploaded file temporarily
-    temp_path = os.path.join("output", uploaded_file.name)
+    os.makedirs("temp", exist_ok=True)
+    temp_path = os.path.join("temp", uploaded_file.name)
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    st.info("Processing file... ⏳")
-
-    # Analyze file directly
+    # ---------- Generate README & PDF ----------
     result = analyze_file(temp_path)
 
     if "error" in result:
-        st.error(f"❌ Error: {result['error']}")
+        st.error(result["error"])
     else:
         st.success("✅ File processed successfully!")
-        st.json(result)
+        
+        # ---------- Step 5: File Preview ----------
+        df = result["dataframe"]
+        st.subheader("📋 File Preview")
+        st.write("First 10 rows:")
+        st.dataframe(df.head(10))
 
-        # Download buttons
-        readme_path = "output/README.md"
-        if os.path.exists(readme_path):
-            with open(readme_path, "r", encoding="utf-8") as f:
-                st.download_button("📄 Download README.md", f, "README.md")
+        st.write("Columns & Data Types:")
+        col_info = df.dtypes.reset_index()
+        col_info.columns = ["Column Name", "Data Type"]
+        st.table(col_info)
 
-        pdf_path = "output/report.pdf"
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                st.download_button("📄 Download PDF Report", f, "report.pdf")
+        st.subheader("🩺 Dataset Health")
+        st.write(f"Total Columns: {result['summary']['columns']}")
+        st.write(f"Numeric Columns: {result['summary']['numeric_count']}")
+        st.write(f"Categorical Columns: {result['summary']['categorical_count']}")
+        st.write(f"Completeness: {result['summary']['completeness']}%")
 
-        readme_pdf_path = "output/README.pdf"
-        if os.path.exists(readme_pdf_path):
-            with open(readme_pdf_path, "rb") as f:
-                st.download_button("📄 Download README PDF", f, "README.pdf")
+        st.subheader("📊 Generated Graphs")
+        for graph in result["graphs"]:
+            st.image(graph, caption=os.path.basename(graph))
