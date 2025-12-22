@@ -1,101 +1,151 @@
-import streamlit as st
+import os
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
+import json
 from fpdf import FPDF
-import io
+import matplotlib.pyplot as plt
+import numpy as np
 
-st.set_page_config(page_title="Auto Data Analyzer", layout="wide")
+def analyze_file(file_path):
+    os.makedirs("output", exist_ok=True)
 
-st.title("📊 Auto Data Analyzer")
+    file_name = os.path.basename(file_path)
+    ext = os.path.splitext(file_name)[1].lower()
 
-# ----------------- Upload Data -----------------
-uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    st.success("✅ File loaded successfully!")
-    st.write("Preview of your data:", df.head())
+    try:
+        # ---------- READ FILE ----------
+        if ext == ".csv":
+            df = pd.read_csv(file_path, low_memory=False)
 
-    # ----------------- 1️⃣ Data Health Score -----------------
-    st.header("1️⃣ Data Health Score")
-    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-    categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
-    
-    missing_pct = df.isnull().mean() * 100
-    unique_pct = df.nunique() / len(df) * 100
-    completeness_score = 100 - missing_pct.mean()
-    uniqueness_score = unique_pct.mean()
-    health_score = (completeness_score + uniqueness_score) / 2
+        elif ext in [".xlsx", ".xls"]:
+            df = pd.read_excel(file_path)
 
-    st.subheader("Radar Chart")
-    labels = ['Completeness', 'Uniqueness']
-    stats = [completeness_score, uniqueness_score]
-    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
-    stats += stats[:1]
-    angles += angles[:1]
+        elif ext == ".json":
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            df = pd.json_normalize(data)
 
-    fig, ax = plt.subplots(figsize=(5,5), subplot_kw=dict(polar=True))
-    ax.plot(angles, stats, 'o-', linewidth=2)
-    ax.fill(angles, stats, alpha=0.25)
-    ax.set_thetagrids(np.degrees(angles[:-1]), labels)
-    ax.set_title(f"Data Health Score: {health_score:.2f}%")
-    st.pyplot(fig)
+        elif ext == ".py":
+            with open(file_path, "r", encoding="utf-8") as f:
+                code = f.read()
 
-    # ----------------- 2️⃣ Auto AI-style Insights -----------------
-    st.header("2️⃣ Auto AI-style Insights (Executive Summary)")
-    summary = f"Your dataset has {df.shape[0]} rows and {df.shape[1]} columns.\n\n"
-    summary += f"- Numeric columns: {numeric_cols}\n"
-    summary += f"- Categorical columns: {categorical_cols}\n"
-    summary += f"- Average missing values per column: {missing_pct.mean():.2f}%\n"
-    summary += f"- Average uniqueness percentage: {uniqueness_score:.2f}%\n"
-    
-    # Example of correlation insight
-    if numeric_cols:
-        corr_matrix = df[numeric_cols].corr()
-        high_corr = corr_matrix.abs().unstack().sort_values(ascending=False)
-        high_corr = high_corr[high_corr < 1].drop_duplicates()
-        top_corr = high_corr.head(3)
-        summary += f"- Top correlations:\n{top_corr}\n"
+            with open("output/README.md", "w", encoding="utf-8") as f:
+                f.write("AUTO GENERATED DOCUMENTATION\n\n")
+                f.write("PYTHON FILE\n\n")
+                f.write(code)
 
-    st.text_area("Executive Summary", summary, height=200)
+            return {"file": file_name, "type": "python"}
 
-    # ----------------- 3️⃣ ML Readiness + Algorithm Suggestion -----------------
-    st.header("3️⃣ ML Readiness Score + Algorithm Suggestions")
-    ml_ready_score = health_score
-    st.write(f"ML Readiness Score: {ml_ready_score:.2f}%")
-    
-    # Suggest algorithms based on column types
-    if numeric_cols and len(numeric_cols) > 1:
-        st.subheader("Suggested ML Algorithms (Regression / Clustering)")
-        st.write("- Linear Regression, Random Forest Regressor (numeric target)")
-        st.write("- KMeans, DBSCAN (unsupervised clustering)")
-    if categorical_cols:
-        st.subheader("Suggested ML Algorithms (Classification)")
-        st.write("- Decision Tree, Random Forest Classifier, XGBoost")
+        else:
+            return {"error": "Unsupported file type"}
 
-    # ----------------- 4️⃣ PDF Export -----------------
-    st.header("4️⃣ Export Report as PDF")
-    if st.button("Generate PDF"):
+        # ---------- BASIC STATS ----------
+        rows, cols = df.shape
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+
+        completeness = round((df.notna().sum().sum() / (rows * cols)) * 100, 2)
+        duplicate_pct = round((df.duplicated().sum() / rows) * 100, 2)
+
+        high_missing_cols = [
+            col for col in df.columns if df[col].isna().mean() * 100 > 50
+        ]
+
+        # ---------- MODEL READINESS SCORE ----------
+        model_readiness = round(
+            (completeness * 0.5) +
+            ((100 - duplicate_pct) * 0.2) +
+            (min(len(numeric_cols) / cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols) / cols, 1) * 100 * 0.15),
+            2
+        )
+
+        # ---------- EXECUTIVE SUMMARY ----------
+        exec_summary = f"""
+This dataset contains {rows} rows and {cols} columns.
+Overall completeness is {completeness}% with {duplicate_pct}% duplicate records.
+
+The dataset has {len(numeric_cols)} numeric and {len(categorical_cols)} categorical features.
+
+Model readiness score is {model_readiness}/100.
+"""
+
+        if high_missing_cols:
+            exec_summary += f"\nHigh missing columns detected: {', '.join(high_missing_cols)}."
+
+        if model_readiness >= 80:
+            exec_summary += "\nThe dataset is well-suited for machine learning."
+        elif model_readiness >= 60:
+            exec_summary += "\nThe dataset requires moderate cleaning before modeling."
+        else:
+            exec_summary += "\nThe dataset needs significant preprocessing before modeling."
+
+        # ---------- INIT PDF ----------
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(0, 10, "Auto Data Analyzer Report", ln=True, align="C")
-        pdf.set_font("Arial", '', 12)
-        pdf.ln(10)
-        
-        # Add Data Health Score
-        pdf.cell(0, 10, f"Data Health Score: {health_score:.2f}%", ln=True)
-        pdf.cell(0, 10, f"Completeness: {completeness_score:.2f}%", ln=True)
-        pdf.cell(0, 10, f"Uniqueness: {uniqueness_score:.2f}%", ln=True)
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "AUTO GENERATED DATA REPORT", ln=True)
         pdf.ln(5)
 
-        # Add Summary
-        pdf.multi_cell(0, 6, summary)
+        # ---------- DATASET OVERVIEW ----------
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Dataset Overview", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(
+            0, 8,
+            f"File Name: {file_name}\n"
+            f"Rows: {rows}\n"
+            f"Columns: {cols}\n"
+            f"Completeness: {completeness}%\n"
+            f"Duplicate Rows: {duplicate_pct}%\n"
+        )
+
+        # ---------- EXECUTIVE SUMMARY PAGE ----------
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Executive Summary", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(0, 8, exec_summary)
+
+        # ---------- MODEL READINESS ----------
         pdf.ln(5)
-        pdf.multi_cell(0, 6, "ML Readiness Score: {:.2f}%".format(ml_ready_score))
-        
-        pdf_output = io.BytesIO()
-        pdf.output(pdf_output)
-        pdf_output.seek(0)
-        st.download_button("📥 Download PDF", data=pdf_output, file_name="data_report.pdf", mime="application/pdf")
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Model Readiness Assessment", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(
+            0, 8,
+            f"Model Readiness Score: {model_readiness}/100\n"
+            f"Numeric Features: {len(numeric_cols)}\n"
+            f"Categorical Features: {len(categorical_cols)}"
+        )
+
+        # ---------- COLUMN STATS ----------
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Column Statistics", ln=True)
+        pdf.set_font("Arial", "", 11)
+
+        for col in numeric_cols:
+            pdf.multi_cell(
+                0, 7,
+                f"{col}\n"
+                f"Min: {df[col].min()}\n"
+                f"Max: {df[col].max()}\n"
+                f"Avg: {round(df[col].mean(),2)}\n"
+                + "-" * 40
+            )
+
+        # ---------- SAVE PDF ----------
+        pdf.output("output/report.pdf")
+
+        # ---------- RETURN ----------
+        return {
+            "summary": {
+                "rows": rows,
+                "columns": cols,
+                "completeness": completeness,
+                "model_readiness": model_readiness
+            }
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
