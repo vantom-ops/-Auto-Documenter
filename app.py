@@ -70,10 +70,10 @@ if uploaded_file:
             # ---------- METRIC CARDS ----------
             st.markdown("### 📊 Dataset Metrics")
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("📝 Rows", rows)
-            col2.metric("📂 Columns", cols)
-            col3.metric("🔢 Numeric Columns", numeric_count)
-            col4.metric("🗂 Categorical Columns", categorical_count)
+            col1.metric("📝 Rows", rows, delta_color="normal")
+            col2.metric("📂 Columns", cols, delta_color="normal")
+            col3.metric("🔢 Numeric Columns", numeric_count, delta_color="normal")
+            col4.metric("🗂 Categorical Columns", categorical_count, delta_color="normal")
             st.metric("✅ Completeness (%)", completeness)
 
             # ---------- WARNINGS ----------
@@ -86,7 +86,11 @@ if uploaded_file:
             if warnings:
                 st.markdown("### ⚠ Warnings")
                 for w in warnings:
-                    st.warning(w)
+                    st.markdown(f"""
+                    <div style="background-color:#ff4c4c; color:white; padding:10px; border-radius:5px; margin-bottom:5px">
+                        ⚠ {w}
+                    </div>
+                    """, unsafe_allow_html=True)
             else:
                 st.success("No major warnings detected ✅")
 
@@ -105,17 +109,13 @@ if uploaded_file:
                         fig = px.line(df_preview, y=col, title=f"{col} Interactive Graph", labels={"index": "Index"})
                         st.plotly_chart(fig, use_container_width=True)
 
-            # ---------- CORRELATION HEATMAP + TABLE ----------
+            # ---------- CORRELATION HEATMAP ----------
             if show_corr and numeric_count > 1:
-                with st.expander("🔥 Correlation Heatmap & Table", expanded=False):
+                with st.expander("🔥 Correlation Heatmap", expanded=False):
                     plt.figure(figsize=(10, 6))
-                    corr_matrix = df_preview[numeric_cols].corr()
-                    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", linewidths=0.5)
+                    sns.heatmap(df_preview[numeric_cols].corr(), annot=True, cmap="coolwarm", linewidths=0.5)
                     st.pyplot(plt)
                     plt.close()
-
-                    st.markdown("### 📋 Correlation Values Preview")
-                    st.dataframe(corr_matrix.round(2))
 
             # ---------- DOWNLOAD PDF ----------
             pdf_path = "output/report.pdf"
