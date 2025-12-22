@@ -1,30 +1,26 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os
-from parser import analyze_file  # your phraiser.py or parser.py
-from fpdf import FPDF
 import matplotlib.pyplot as plt
 import seaborn as sns
+from fpdf import FPDF
+import os
+import io
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="📄 Auto-Documenter",
-    page_icon="📊",
-    layout="wide"
-)
-
+st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
 st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload a CSV, Excel, or JSON file to generate documentation and PDF report.")
+st.markdown("Upload CSV, Excel, or JSON to generate dataset insights and PDF report.")
 st.markdown("---")
 
+# Sidebar
 with st.sidebar:
-    st.header("⚙ Settings")
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
+# File uploader
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
+    # Load dataframe
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
@@ -38,124 +34,125 @@ if uploaded_file:
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    if st.button("🚀 Generate Documentation"):
-        with st.spinner("Processing file..."):
-            # Save temp file for parser
-            os.makedirs("temp_upload", exist_ok=True)
-            temp_path = os.path.join("temp_upload", uploaded_file.name)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+    # Dataset metrics
+    st.markdown("## 📊 Dataset Metrics")
+    rows, cols = df.shape
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Rows", rows)
+    c2.metric("Columns", cols)
+    c3.metric("Numeric Columns", len(numeric_cols))
+    c4.metric("Categorical Columns", len(categorical_cols))
 
-            result = analyze_file(temp_path)
+    # Column datatypes
+    st.markdown("## 📌 Column Datatypes")
+    col_types = pd.Series(df.dtypes).astype(str)
+    for col, dtype in col_types.items():
+        st.write(f"- **{col}**: {dtype}")
 
-        if "error" in result:
-            st.error(f"Error: {result['error']}")
-            st.stop()
+    # Missing values
+    st.markdown("## ⚠ Missing Values % per Column")
+    missing_pct = (df.isna().sum() / len(df) * 100).round(2)
+    st.dataframe(missing_pct, use_container_width=True)
 
-        st.success("✅ Documentation generated successfully!")
+    # ML readiness score (example formula)
+    completeness = round(100 - missing_pct.mean(), 2)
+    duplicate_pct = round(df.duplicated().mean() * 100, 2)
+    ml_ready_score = round(
+        (completeness * 0.4) + ((100 - duplicate_pct) * 0.3) +
+        (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
+        (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
+        2
+    )
+    st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
+    st.metric("ML Readiness Score", f"{ml_ready_score}/100")
+    if numeric_cols and len(numeric_cols) > 1:
+        st.write("- Regression: Linear Regression, Random Forest Regressor, Gradient Boosting")
+    if categorical_cols:
+        st.write("- Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression")
+    if numeric_cols and not categorical_cols:
+        st.write("- Clustering: KMeans, DBSCAN, Hierarchical Clustering")
 
-        # ---------- DISPLAY METRICS ----------
-        st.markdown("## 📊 Dataset Metrics")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", result['summary']['rows'])
-        c2.metric("Columns", result['summary']['columns'])
-        c3.metric("Numeric Columns", result['numeric_count'])
-        c4.metric("Categorical Columns", result['categorical_count'])
+    # Column graphs
+    st.markdown("## 📈 Column Graphs (Min, Max, Avg)")
+    graph_images = []
+    for col in numeric_cols:
+        col_min = df[col].min()
+        col_max = df[col].max()
+        col_avg = round(df[col].mean(), 2)
 
-        st.markdown("## 📌 Column Datatypes")
-        col_types = pd.Series(df.dtypes).astype(str)
-        for col, dtype in col_types.items():
-            st.write(f"- **{col}**: {dtype}")
+        st.markdown(f"### {col}: Min={col_min}, Max={col_max}, Avg={col_avg}")
+        fig, ax = plt.subplots(figsize=(8, 3))
+        ax.plot(df[col], marker='o', linestyle='-', label=col)
+        ax.axhline(col_min, color='red', linestyle='--', label=f'Min={col_min}')
+        ax.axhline(col_max, color='green', linestyle='--', label=f'Max={col_max}')
+        ax.axhline(col_avg, color='blue', linestyle='-.', label=f'Avg={col_avg}')
+        ax.set_title(f"{col} Min/Max/Avg")
+        ax.set_xlabel("Index")
+        ax.set_ylabel(col)
+        ax.legend()
+        st.pyplot(fig)
 
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        # Save figure for PDF
+        img_path = f"temp_{col}.png"
+        fig.savefig(img_path, bbox_inches='tight')
+        graph_images.append(img_path)
+        plt.close(fig)
 
-        # ---------- PDF REPORT ----------
-        st.markdown("## 📝 PDF Report")
-        os.makedirs("output", exist_ok=True)
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
-        pdf.ln(5)
+    # Correlation heatmap
+    if len(numeric_cols) > 1:
+        st.markdown("## 🔗 Correlation Heatmap")
+        corr = df[numeric_cols].corr().round(2)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
+        st.pyplot(fig)
+        heatmap_path = "temp_corr.png"
+        fig.savefig(heatmap_path, bbox_inches='tight')
+        plt.close(fig)
+    else:
+        heatmap_path = None
 
-        # Column datatypes
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 8, "Column Datatypes", ln=True)
-        pdf.set_font("Arial", "", 12)
-        for col, dtype in col_types.items():
-            pdf.multi_cell(0, 6, f"{col}: {dtype}")
-        pdf.ln(5)
+    # ---------- PDF REPORT ----------
+    st.markdown("## 📝 PDF Report (Compact)")
+    os.makedirs("output", exist_ok=True)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
+    pdf.ln(5)
 
-        # Dataset metrics
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 8, "Dataset Metrics", ln=True)
-        pdf.set_font("Arial", "", 12)
-        pdf.multi_cell(
-            0, 6,
-            f"Rows: {result['summary']['rows']}\n"
-            f"Columns: {result['summary']['columns']}\n"
-            f"Numeric Columns: {result['numeric_count']}\n"
-            f"Categorical Columns: {result['categorical_count']}"
+    # Dataset metrics
+    pdf.set_font("Arial", "", 12)
+    pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}\n")
+
+    # Column datatypes
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 8, "Column Datatypes", ln=True)
+    pdf.set_font("Arial", "", 12)
+    for col, dtype in col_types.items():
+        pdf.multi_cell(0, 6, f"{col}: {dtype}")
+
+    # Graphs + heatmap in PDF
+    for img in graph_images:
+        pdf.ln(2)
+        pdf.image(img, x=10, w=180)
+    if heatmap_path:
+        pdf.ln(2)
+        pdf.image(heatmap_path, x=10, w=180)
+
+    # Save PDF
+    pdf_path = os.path.join("output", "report.pdf")
+    pdf.output(pdf_path)
+
+    # Download button
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+        st.download_button(
+            label="📥 Download Full PDF Report",
+            data=pdf_bytes,
+            file_name="Auto_Documenter_Report.pdf",
+            mime="application/pdf",
+            use_container_width=True
         )
-        pdf.ln(5)
-
-        # Graphs: Min/Max/Avg
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 8, "Column Graphs (Min/Max/Avg)", ln=True)
-        pdf.set_font("Arial", "", 12)
-
-        for col in numeric_cols:
-            col_min = df[col].min()
-            col_max = df[col].max()
-            col_avg = round(df[col].mean(), 2)
-
-            # Create line graph
-            plt.figure(figsize=(6, 3))
-            plt.plot(df[col], marker='o', linestyle='-', label=col)
-            plt.axhline(col_min, color='red', linestyle='--', label=f'Min={col_min}')
-            plt.axhline(col_max, color='green', linestyle='--', label=f'Max={col_max}')
-            plt.axhline(col_avg, color='blue', linestyle='-.', label=f'Avg={col_avg}')
-            plt.title(f"{col} Min/Max/Avg")
-            plt.tight_layout()
-            plt.legend()
-            graph_file = f"output/{col}_graph.png"
-            plt.savefig(graph_file)
-            plt.close()
-
-            pdf.multi_cell(0, 6, f"{col}: Min={col_min}, Max={col_max}, Avg={col_avg}")
-            pdf.image(graph_file, x=10, w=180)
-            pdf.ln(5)
-
-        # Correlation heatmap
-        if len(numeric_cols) > 1:
-            corr = df[numeric_cols].corr()
-            plt.figure(figsize=(6, 5))
-            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm")
-            plt.title("Correlation Heatmap")
-            plt.tight_layout()
-            heatmap_file = "output/correlation_heatmap.png"
-            plt.savefig(heatmap_file)
-            plt.close()
-
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 8, "Correlation Heatmap", ln=True)
-            pdf.image(heatmap_file, x=10, w=180)
-            pdf.ln(5)
-
-        # Save PDF
-        pdf_path = os.path.join("output", "report.pdf")
-        pdf.output(pdf_path)
-
-        # Download button
-        if os.path.exists(pdf_path):
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
-            st.download_button(
-                label="📥 Download PDF Report",
-                data=pdf_bytes,
-                file_name="Auto_Documenter_Report.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-        else:
-            st.error("PDF generation failed.")
