@@ -1,104 +1,118 @@
-import pandas as pd
 import os
+import pandas as pd
 import matplotlib.pyplot as plt
+import json
 from fpdf import FPDF
-import ast
 
-def analyze_file(file_path, column_descriptions=None):
-    """
-    column_descriptions: dict, e.g. {"Name": "Employee name", "Salary": "Monthly salary"}
-    Supports CSV, Excel (.xls/.xlsx), JSON, and Python (.py) files.
-    Generates README.md and PDF in 'output/' folder in plain text with bold headings.
-    """
+def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
 
-    def safe_text(text):
-        """Replace unsupported characters for PDF"""
-        return str(text).replace("→", "->").replace("📄", "").replace("…", "...")
+    file_name = os.path.basename(file_path)
+    ext = os.path.splitext(file_name)[1].lower()
+
+    image_paths = []
 
     try:
-        # ---------------- Load file ----------------
-        if file_path.endswith(".csv"):
-            df = pd.read_csv(file_path, low_memory=False, encoding='utf-8', on_bad_lines='skip')
-            file_type = "tabular"
-        elif file_path.endswith((".xls", ".xlsx")):
+        # ---------- READ FILE ----------
+        if ext == ".csv":
+            df = pd.read_csv(file_path, low_memory=False)
+
+        elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
-            file_type = "tabular"
-        elif file_path.endswith(".json"):
-            df = pd.read_json(file_path)
-            file_type = "tabular"
-        elif file_path.endswith(".py"):
-            file_type = "python"
+
+        elif ext == ".json":
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            df = pd.json_normalize(data)
+
+        elif ext == ".py":
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
-            tree = ast.parse(code)
-            py_summary = []
-            for node in tree.body:
-                if isinstance(node, ast.FunctionDef):
-                    doc = ast.get_docstring(node)
-                    py_summary.append({"Type":"Function","Name":node.name,"Docstring":doc})
-                elif isinstance(node, ast.ClassDef):
-                    doc = ast.get_docstring(node)
-                    py_summary.append({"Type":"Class","Name":node.name,"Docstring":doc})
+
+            with open("output/README.md", "w", encoding="utf-8") as f:
+                f.write("AUTO GENERATED DOCUMENTATION\n\n")
+                f.write("PYTHON FILE\n\n")
+                f.write(code)
+
+            return {"file": file_name, "type": "python"}
+
         else:
             return {"error": "Unsupported file type"}
 
-        summary = {}
+        # ---------- SUMMARY ----------
+        summary = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "column_names": list(df.columns)
+        }
 
-        # ---------------- README.md ----------------
+        # ---------- README ----------
         readme_path = "output/README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
-            f.write("# 📄 Auto-Generated Documentation\n\n")
-            if file_type == "tabular":
-                summary = {
-                    "rows": len(df),
-                    "columns": len(df.columns),
-                    "column_names": list(df.columns)
-                }
-                f.write(f"**Total Rows:** {summary['rows']}\n\n")
-                f.write(f"**Total Columns:** {summary['columns']}\n\n")
-                f.write("## Columns Overview\n")
-                for col in df.columns:
-                    dtype = df[col].dtype
-                    desc = column_descriptions.get(col,"") if column_descriptions else ""
-                    examples = df[col].dropna().unique()[:5]
-                    examples_str = ", ".join([str(e) for e in examples])
-                    f.write(f"- **{col}** ({dtype}): {desc} | Example values → {examples_str}\n")
-            elif file_type == "python":
-                f.write("## Python File Summary\n")
-                for item in py_summary:
-                    doc = item["Docstring"] if item["Docstring"] else ""
-                    f.write(f"- **{item['Type']}** {item['Name']}: {doc}\n")
+            f.write("AUTO GENERATED DOCUMENTATION\n\n")
+            f.write(f"File Name: {file_name}\n\n")
+            f.write(f"Total Rows: {summary['rows']}\n")
+            f.write(f"Total Columns: {summary['columns']}\n\n")
+            f.write("COLUMNS\n\n")
+            for col in df.columns:
+                f.write(f"- {col} ({df[col].dtype})\n")
 
-        # ---------------- PDF Export ----------------
+        # ---------- NUMERIC CHART ----------
+        numeric_cols = df.select_dtypes(include="number").columns
+        if len(numeric_cols) > 0:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            df[numeric_cols].hist(ax=ax)
+            plt.tight_layout()
+
+            num_img = "output/numeric_summary.png"
+            plt.savefig(num_img)
+            plt.close()
+
+            image_paths.append(num_img)
+
+        # ---------- CATEGORICAL CHARTS ----------
+        cat_cols = df.select_dtypes(include="object").columns
+        for col in cat_cols:
+            if df[col].nunique() <= 10:
+                fig, ax = plt.subplots(figsize=(6, 4))
+                df[col].value_counts().plot(kind="bar", ax=ax)
+                ax.set_title(col)
+                plt.tight_layout()
+
+                img_path = f"output/{col}_chart.png"
+                plt.savefig(img_path)
+                plt.close()
+
+                image_paths.append(img_path)
+
+        # ---------- PDF GENERATION ----------
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", 'B', 16)
-        pdf.multi_cell(0, 10, safe_text("Auto-Generated Documentation\n\n"))
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "AUTO GENERATED DOCUMENTATION", ln=True)
 
-        pdf.set_font("Arial", 'B', 12)
-        if file_type == "tabular":
-            pdf.multi_cell(0, 8, f"Total Rows: {summary['rows']}")
-            pdf.multi_cell(0, 8, f"Total Columns: {summary['columns']}\n")
-            pdf.multi_cell(0, 10, "Columns Overview:")
+        pdf.set_font("Arial", "", 12)
+        pdf.ln(5)
+        pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
+        pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
+        pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
 
-            pdf.set_font("Arial", '', 12)
-            for col in df.columns:
-                dtype = df[col].dtype
-                desc = column_descriptions.get(col,"") if column_descriptions else ""
-                examples = df[col].dropna().unique()[:5]
-                examples_str = ", ".join([str(e) for e in examples])
-                pdf.multi_cell(0, 8, safe_text(f"- {col} ({dtype}): {desc} | Example values -> {examples_str}"))
-        elif file_type == "python":
-            pdf.multi_cell(0, 10, "Python File Summary:")
-            pdf.set_font("Arial", '', 12)
-            for item in py_summary:
-                doc = item["Docstring"] if item["Docstring"] else ""
-                pdf.multi_cell(0, 8, safe_text(f"- {item['Type']} {item['Name']}: {doc}"))
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "COLUMNS", ln=True)
+
+        pdf.set_font("Arial", "", 11)
+        for col in df.columns:
+            pdf.multi_cell(0, 7, f"{col} ({df[col].dtype})")
+
+        # ---------- INSERT IMAGES INTO PDF ----------
+        for img in image_paths:
+            pdf.add_page()
+            pdf.image(img, w=180)
 
         pdf.output("output/report.pdf")
+
         return summary
 
     except Exception as e:
-        print("Error processing file:", e)
         return {"error": str(e)}
