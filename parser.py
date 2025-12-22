@@ -199,11 +199,8 @@ def analyze_file(file_path, file_name):
         # ---------- STEP 4: CREATE ZIP ----------
         zip_path = os.path.join("output", "Auto_Documenter_Output.zip")
         with ZipFile(zip_path, 'w') as zipf:
-            # README
             zipf.write(readme_path, arcname="README.md")
-            # PDF
             zipf.write(pdf_file_path, arcname="report.pdf")
-            # Numeric charts
             for g in graph_paths:
                 zipf.write(g, arcname=os.path.join("numeric_charts", os.path.basename(g)))
 
@@ -216,11 +213,16 @@ def analyze_file(file_path, file_name):
 st.title("📄 Auto-Documenter")
 st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json", "py"])
+# Only one uploader at top level
+uploaded_file = st.file_uploader(
+    "Choose a file",
+    type=["csv", "xlsx", "xls", "json", "py"]
+)
 
 if uploaded_file:
     st.info("Processing file... ⏳")
-    # Save the uploaded file temporarily
+
+    # Save uploaded file temporarily
     temp_path = os.path.join("output", uploaded_file.name)
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
