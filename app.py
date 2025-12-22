@@ -8,6 +8,7 @@ from parser import analyze_file
 import os
 import numpy as np
 from fpdf import FPDF
+import io
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -222,7 +223,7 @@ if uploaded_file:
             st.subheader("Suggested Algorithms (Unsupervised/Clustering)")
             st.write("- KMeans, DBSCAN, Hierarchical Clustering")
 
-        # ---------- PDF REPORT ----------
+        # ---------- PDF REPORT (Unicode-Safe) ----------
         st.markdown("## 📝 Full PDF Report")
         pdf = FPDF()
         pdf.add_page()
@@ -252,7 +253,10 @@ if uploaded_file:
         for a, b, v in strong_corrs:
             pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
 
-        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        # Use BytesIO to make Unicode-safe PDF for Streamlit
+        pdf_output = io.BytesIO()
+        pdf.output(pdf_output)
+        pdf_bytes = pdf_output.getvalue()
 
         st.download_button(
             label="📥 Download Full PDF Report",
