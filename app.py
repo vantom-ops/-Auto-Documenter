@@ -225,7 +225,7 @@ if uploaded_file:
 
         # ---------- PDF REPORT ----------
         st.markdown("## 📝 Generate Full PDF Report")
-        if st.button("Generate Full PDF"):
+        if st.button("📥 Download Full PDF Report", key="pdf_button"):
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", 'B', 16)
@@ -259,7 +259,7 @@ if uploaded_file:
             pdf_output.seek(0)
 
             st.download_button(
-                label="⬇️ Download Generated PDF",
+                label="⬇️ DOWNLOAD FULL PDF REPORT",
                 data=pdf_output,
                 file_name="Auto_Documenter_Full_Report.pdf",
                 mime="application/pdf",
