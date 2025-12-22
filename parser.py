@@ -1,49 +1,42 @@
 import os
 import pandas as pd
 import json
-from fpdf import FPDF
 import matplotlib.pyplot as plt
-import shutil
+from fpdf import FPDF
 from zipfile import ZipFile
+import streamlit as st
 
-def analyze_file(file_path):
+# ---------- ANALYSIS FUNCTION ----------
+def analyze_file(file_path, file_name):
     os.makedirs("output", exist_ok=True)
 
-    file_name = os.path.basename(file_path)
     ext = os.path.splitext(file_name)[1].lower()
 
     try:
         # ---------- READ FILE ----------
         if ext == ".csv":
             df = pd.read_csv(file_path, low_memory=False)
-
         elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
-
         elif ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             df = pd.json_normalize(data)
-
         elif ext == ".py":
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
-
-            readme_path = "output/README.md"
+            readme_path = os.path.join("output", "README.md")
             with open(readme_path, "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
-
             return {"file": file_name, "type": "python"}
-
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- COLUMN TYPES & COUNTS ----------
+        # ---------- COLUMN TYPES ----------
         numeric_cols = df.select_dtypes(include=['number']).columns
         categorical_cols = df.select_dtypes(exclude=['number']).columns
-
         numeric_count = len(numeric_cols)
         categorical_count = len(categorical_cols)
         numeric_ratio = round((numeric_count / len(df.columns)) * 100, 2)
@@ -65,7 +58,7 @@ def analyze_file(file_path):
             "completeness": completeness
         }
 
-        # ---------- Warnings ----------
+        # ---------- WARNINGS ----------
         warnings = []
         high_missing_cols = df.columns[df.isna().mean() > 0.5].tolist()
         many_unique_cols = df.columns[df.nunique() > 50].tolist()
@@ -77,7 +70,7 @@ def analyze_file(file_path):
             warnings.append("No major warnings detected.")
 
         # ---------- INIT README ----------
-        readme_path = "output/README.md"
+        readme_path = os.path.join("output", "README.md")
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write("AUTO GENERATED DOCUMENTATION\n\n")
             f.write(f"File Name: {file_name}\n\n")
@@ -101,9 +94,8 @@ def analyze_file(file_path):
         pdf.set_font("Arial", "", 11)
 
         # ---------- CREATE GRAPH FOLDER ----------
-        graph_folder = "output/numeric_charts"
+        graph_folder = os.path.join("output", "numeric_charts")
         os.makedirs(graph_folder, exist_ok=True)
-
         graph_paths = []
 
         # ---------- COLUMN INSIGHTS + GRAPHS ----------
@@ -160,13 +152,13 @@ def analyze_file(file_path):
                 plt.close()
                 graph_paths.append(graph_file)
 
-                # ---------- Add min/max to README ----------
+                # Add min/max to README
                 with open(readme_path, "a", encoding="utf-8") as f:
                     f.write(f"Minimum Value: {min_value}\n")
                     f.write(f"Maximum Value: {max_value}\n")
                     f.write(f"![{col}]({graph_file})\n\n")
 
-                # ---------- Add min/max + graph to PDF ----------
+                # Add min/max + graph to PDF
                 pdf.set_font("Arial", "B", 12)
                 pdf.cell(0, 8, f"{col} Min & Max", ln=True)
                 pdf.set_font("Arial", "", 11)
@@ -201,16 +193,17 @@ def analyze_file(file_path):
         pdf.ln(5)
 
         # ---------- SAVE PDF ----------
-        pdf.output("output/report.pdf")
+        pdf_file_path = os.path.join("output", "report.pdf")
+        pdf.output(pdf_file_path)
 
         # ---------- STEP 4: CREATE ZIP ----------
-        zip_path = "output/Auto_Documenter_Output.zip"
+        zip_path = os.path.join("output", "Auto_Documenter_Output.zip")
         with ZipFile(zip_path, 'w') as zipf:
-            # Add README
+            # README
             zipf.write(readme_path, arcname="README.md")
-            # Add PDF
-            zipf.write("output/report.pdf", arcname="report.pdf")
-            # Add numeric graphs
+            # PDF
+            zipf.write(pdf_file_path, arcname="report.pdf")
+            # Numeric charts
             for g in graph_paths:
                 zipf.write(g, arcname=os.path.join("numeric_charts", os.path.basename(g)))
 
@@ -218,3 +211,36 @@ def analyze_file(file_path):
 
     except Exception as e:
         return {"error": str(e)}
+
+# ---------- STREAMLIT APP ----------
+st.title("📄 Auto-Documenter")
+st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
+
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json", "py"])
+
+if uploaded_file:
+    st.info("Processing file... ⏳")
+    # Save the uploaded file temporarily
+    temp_path = os.path.join("output", uploaded_file.name)
+    with open(temp_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    # Run analysis
+    result = analyze_file(temp_path, uploaded_file.name)
+
+    if "error" in result:
+        st.error(result["error"])
+    else:
+        st.success("✅ File processed successfully!")
+        st.json(result)
+
+        # ---------- ZIP DOWNLOAD ----------
+        zip_file = result.get("zip_file")
+        if zip_file and os.path.exists(zip_file):
+            with open(zip_file, "rb") as f:
+                st.download_button(
+                    label="Download All Outputs (ZIP)",
+                    data=f,
+                    file_name="Auto_Documenter_Output.zip",
+                    mime="application/zip"
+                )
