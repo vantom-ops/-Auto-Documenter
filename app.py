@@ -15,16 +15,25 @@ if theme == "Dark":
     st.markdown("<style>body{background-color:#222;color:white;}</style>", unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("# 📄 Auto-Documenter")
+st.markdown("<h1 style='text-align:center'>📄 Auto-Documenter</h1>", unsafe_allow_html=True)
 st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 st.markdown("---")
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
-    preview_rows = st.number_input("Preview Rows", min_value=5, max_value=50, value=10, help="Number of rows to preview in the table")
-    show_graphs = st.checkbox("Show Column Graphs", value=True, help="Display interactive graphs for numeric columns")
-    show_corr = st.checkbox("Show Correlation Heatmap", value=True, help="Display heatmap of correlations between numeric columns")
+    preview_rows = st.number_input(
+        "Preview Rows", min_value=5, max_value=50, value=10,
+        help="Number of rows to preview in the table"
+    )
+    show_graphs = st.checkbox(
+        "Show Column Graphs", value=True,
+        help="Display interactive graphs for numeric columns"
+    )
+    show_corr = st.checkbox(
+        "Show Correlation Heatmap", value=True,
+        help="Display heatmap of correlations between numeric columns"
+    )
 
 # ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json", "py"])
@@ -69,20 +78,20 @@ if uploaded_file:
 
             # ---------- METRIC CARDS ----------
             st.markdown("### 📊 Dataset Metrics")
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("📝 Rows", rows, delta_color="normal")
-            col2.metric("📂 Columns", cols, delta_color="normal")
-            col3.metric("🔢 Numeric Columns", numeric_count, delta_color="normal")
-            col4.metric("🗂 Categorical Columns", categorical_count, delta_color="normal")
-            st.metric("✅ Completeness (%)", completeness)
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("📝 Rows", rows)
+            col2.metric("📂 Columns", cols)
+            col3.metric("🔢 Numeric", numeric_count)
+            col4.metric("🗂 Categorical", categorical_count)
+            col5.metric("✅ Completeness (%)", completeness)
 
             # ---------- WARNINGS ----------
             warnings = []
             for col in df_preview.columns:
                 if df_preview[col].nunique() > 50:
-                    warnings.append(f"Column '{col}' has >50 unique values")
+                    warnings.append(f"⚠ Column '{col}' has >50 unique values")
                 if df_preview[col].isna().sum() / rows * 100 > 50:
-                    warnings.append(f"Column '{col}' has >50% missing values")
+                    warnings.append(f"⚠ Column '{col}' has >50% missing values")
             if warnings:
                 st.markdown("### ⚠ Warnings")
                 for w in warnings:
