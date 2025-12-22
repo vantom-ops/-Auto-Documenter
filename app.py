@@ -155,44 +155,113 @@ if uploaded_file:
                     if i != j and abs(corr.loc[i, j]) > 0.7:
                         strong_corrs.append((i, j, corr.loc[i, j]))
 
-        # ---------- PDF REPORT (FPDF2 Unicode-safe) ----------
-        st.markdown("## 📝 Full PDF Report")
+        # ---------- RADAR CHART ----------
+        st.markdown("## 🕸 Data Health Radar")
+        radar_labels = ["Completeness", "Low Missing", "Low Duplicates", "Numeric Balance", "Categorical Balance"]
+        radar_values = [
+            completeness,
+            100 - (len(high_missing_cols) / cols * 100 if cols else 0),
+            100 - duplicate_pct,
+            min((len(numeric_cols) / cols) * 100, 100),
+            min((len(categorical_cols) / cols) * 100, 100)
+        ]
 
-        pdf = FPDF()
-        pdf.add_page()
-
-        # --- dynamic font path ---
-        font_path = os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf")
-        pdf.add_font("DejaVu", "", font_path, uni=True)
-        pdf.set_font("DejaVu", "", 14)
-
-        pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
-        pdf.ln(5)
-        pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
-        pdf.ln(3)
-        pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100")
-
-        # Column stats
-        pdf.ln(2)
-        pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
-        for col in numeric_cols:
-            pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
-
-        # Insights & Recommendations
-        pdf.ln(2)
-        pdf.multi_cell(0, 6, "Strong Correlations:")
-        for a, b, v in strong_corrs:
-            pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
-
-        # Export PDF using BytesIO
-        pdf_bytes = io.BytesIO()
-        pdf.output(pdf_bytes)
-        pdf_bytes.seek(0)
-
-        st.download_button(
-            label="📥 Download Full PDF Report",
-            data=pdf_bytes,
-            file_name="Auto_Documenter_Full_Report.pdf",
-            mime="application/pdf",
-            use_container_width=True
+        radar_fig = go.Figure(
+            go.Scatterpolar(r=radar_values, theta=radar_labels, fill='toself')
         )
+        radar_fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])))
+        st.plotly_chart(radar_fig, use_container_width=True)
+
+        # ---------- AUTO INSIGHTS ----------
+        st.markdown("## 🤖 Auto Insights")
+        insights = []
+        recommendations = []
+
+        if completeness < 80:
+            insights.append("Dataset has low completeness.")
+            recommendations.append("Consider imputing or removing missing values.")
+
+        if strong_corrs:
+            insights.append("Strong correlations detected.")
+            recommendations.append("Check multicollinearity before modeling.")
+
+        if duplicate_pct > 5:
+            recommendations.append("Remove duplicate rows to improve data quality.")
+
+        for i in insights:
+            st.info(i)
+
+        st.markdown("### 🛠 Auto Recommendations")
+        for r in recommendations:
+            st.success(r)
+
+        # ---------- ML READINESS SCORE & ALGORITHM SUGGESTIONS ----------
+        st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
+
+        ml_ready_score = round(
+            (completeness * 0.4) +
+            ((100 - duplicate_pct) * 0.3) +
+            (min(len(numeric_cols)/cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/cols, 1) * 100 * 0.15),
+            2
+        )
+        st.metric("ML Readiness Score", f"{ml_ready_score} / 100")
+
+        if numeric_cols and len(numeric_cols) > 1:
+            st.subheader("Suggested Algorithms (Numeric/Regression)")
+            st.write("- Linear Regression, Random Forest Regressor, Gradient Boosting")
+        if categorical_cols:
+            st.subheader("Suggested Algorithms (Categorical/Classification)")
+            st.write("- Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
+        if numeric_cols and not categorical_cols:
+            st.subheader("Suggested Algorithms (Unsupervised/Clustering)")
+            st.write("- KMeans, DBSCAN, Hierarchical Clustering")
+
+        # ---------- PDF REPORT (Download in Browser) ----------
+        st.markdown("## 📝 Full PDF Report")
+        if st.button("📥 Download Full PDF Report"):
+            pdf = FPDF()
+            pdf.add_page()
+
+            # Font path (must be in same folder)
+            font_path = os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf")
+            if not os.path.exists(font_path):
+                st.error("Font file DejaVuSans.ttf not found!")
+                st.stop()
+
+            pdf.add_font("DejaVu", "", font_path, uni=True)
+            pdf.set_font("DejaVu", "", 14)
+
+            pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
+            pdf.ln(5)
+            pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
+            pdf.ln(3)
+            pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100\nML Readiness Score: {ml_ready_score} / 100")
+
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
+            for col in numeric_cols:
+                pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
+
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Strong Correlations:")
+            for a, b, v in strong_corrs:
+                pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
+
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Insights & Recommendations:")
+            for text in insights + recommendations:
+                pdf.multi_cell(0, 6, f"- {text}")
+
+            # Export to BytesIO for browser download
+            pdf_output = pdf.output(dest='S').encode('latin-1')
+            pdf_bytes = io.BytesIO(pdf_output)
+            pdf_bytes.seek(0)
+
+            st.download_button(
+                label="📥 Download Full PDF Report",
+                data=pdf_bytes,
+                file_name="Auto_Documenter_Full_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
