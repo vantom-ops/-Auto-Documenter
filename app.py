@@ -1,162 +1,152 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from parser import analyze_file
 import os
+import pandas as pd
+import json
 from fpdf import FPDF
-import io
-import textwrap
+import matplotlib.pyplot as plt
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="📄 Auto-Documenter",
-    page_icon="📊",
-    layout="wide"
-)
+def analyze_file(file_path):
+    os.makedirs("output", exist_ok=True)
 
-st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
-st.markdown("---")
+    file_name = os.path.basename(file_path)
+    ext = os.path.splitext(file_name)[1].lower()
 
-with st.sidebar:
-    st.header("⚙ Settings")
-    preview_rows = st.slider("Preview Rows", 5, 50, 10)
-    show_corr = st.checkbox("Show Correlation Analysis", True)
+    try:
+        # ---------- READ FILE ----------
+        if ext == ".csv":
+            df = pd.read_csv(file_path, low_memory=False)
 
-uploaded_file = st.file_uploader(
-    "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"]
-)
+        elif ext in [".xlsx", ".xls"]:
+            df = pd.read_excel(file_path)
 
-def safe_multicell(pdf, text, width=0, line_height=6):
-    safe_text = ""
-    for word in text.split(" "):
-        if len(word) > 50:
-            word = "\u200B".join([word[i:i+50] for i in range(0, len(word), 50)])
-        safe_text += word + " "
-    pdf.multi_cell(width, line_height, safe_text.strip())
+        elif ext == ".json":
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            df = pd.json_normalize(data)
 
-if uploaded_file:
-    # ---------- LOAD FILE ----------
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith(".json"):
-        df = pd.read_json(uploaded_file)
-    else:
-        df = pd.DataFrame()
+        elif ext == ".py":
+            with open(file_path, "r", encoding="utf-8") as f:
+                code = f.read()
 
-    if not df.empty:
-        st.markdown("## 🔍 File Preview")
-        st.dataframe(df.head(preview_rows), use_container_width=True)
+            readme_path = "output/README.md"
+            with open(readme_path, "w", encoding="utf-8") as f:
+                f.write("AUTO GENERATED DOCUMENTATION\n\n")
+                f.write("PYTHON FILE\n\n")
+                f.write(code)
 
-        # ---------- COLUMN DATATYPES ----------
-        st.markdown("## 🗂 Column Data Types")
-        col_types = pd.DataFrame({
-            "Column": df.columns,
-            "Data Type": df.dtypes.astype(str)
-        })
-        st.dataframe(col_types, use_container_width=True)
+            return {"file": file_name, "type": "python"}
 
-        # ---------- BASIC METRICS ----------
-        rows, cols = df.shape
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
-        completeness = round(df.notna().sum().sum() / (rows*cols) * 100, 2)
-        duplicate_pct = round(df.duplicated().sum()/rows*100,2)
+        else:
+            return {"error": "Unsupported file type"}
 
-        st.markdown("## 📊 Dataset Metrics")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", rows)
-        c2.metric("Columns", cols)
-        c3.metric("Numeric", len(numeric_cols))
-        c4.metric("Categorical", len(categorical_cols))
+        # ---------- BASIC SUMMARY ----------
+        summary = {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "column_names": list(df.columns)
+        }
 
-        # ---------- COLUMN STATISTICS ----------
-        col_stats = []
-        for col in numeric_cols:
-            col_stats.append({
-                "Column": col,
-                "Min": df[col].min(),
-                "Max": df[col].max(),
-                "Avg": round(df[col].mean(),2)
-            })
-        st.markdown("## 📌 Column Statistics (Min, Max, Avg)")
-        st.dataframe(pd.DataFrame(col_stats), use_container_width=True)
+        # ---------- INIT README ----------
+        readme_path = "output/README.md"
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write("AUTO GENERATED DOCUMENTATION\n\n")
+            f.write(f"File Name: {file_name}\n\n")
+            f.write(f"Total Rows: {summary['rows']}\n")
+            f.write(f"Total Columns: {summary['columns']}\n\n")
+            f.write("COLUMN INSIGHTS\n\n")
 
-        # ---------- CORRELATION ----------
-        if show_corr and len(numeric_cols)>1:
-            st.markdown("## 🔥 Correlation Analysis")
-            corr = df[numeric_cols].corr().round(3)
-            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("### 📋 Correlation Table")
-            st.dataframe(corr, use_container_width=True)
-
-        # ---------- ML READINESS SCORE ----------
-        ml_ready_score = round(
-            (completeness*0.4)+((100-duplicate_pct)*0.3)+
-            (min(len(numeric_cols)/cols,1)*100*0.15)+
-            (min(len(categorical_cols)/cols,1)*100*0.15),2
-        )
-        st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
-        st.metric("ML Readiness Score", f"{ml_ready_score}/100")
-        if numeric_cols and len(numeric_cols)>1:
-            st.write("- Linear Regression, Random Forest Regressor, Gradient Boosting")
-        if categorical_cols:
-            st.write("- Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
-        if numeric_cols and not categorical_cols:
-            st.write("- KMeans, DBSCAN, Hierarchical Clustering")
-
-        # ---------- PDF REPORT ----------
-        st.markdown("## 📝 Download PDF Report")
+        # ---------- INIT PDF ----------
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial","",12)
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "AUTO GENERATED DOCUMENTATION", ln=True)
+        pdf.set_font("Arial", "", 12)
+        pdf.ln(4)
+        pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
+        pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
+        pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
+        pdf.ln(6)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
+        pdf.set_font("Arial", "", 11)
 
-        safe_multicell(pdf,"Auto-Documenter Report")
-        pdf.ln(5)
-        safe_multicell(pdf,f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
-        pdf.ln(2)
+        # ---------- GRAPH GENERATION + TEXT ----------
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        graph_paths = []
 
-        safe_multicell(pdf,"Column Data Types:")
-        for i,row in col_types.iterrows():
-            safe_multicell(pdf,f"- {row['Column']}: {row['Data Type']}")
+        for col in df.columns:
+            total = len(df[col])
+            missing = df[col].isna().sum()
+            missing_pct = round((missing / total) * 100, 2)
+            unique = df[col].nunique(dropna=True)
+            samples = df[col].dropna().unique()[:5]
 
-        pdf.ln(2)
-        safe_multicell(pdf,"Column Statistics (Min, Max, Avg):")
-        for stat in col_stats:
-            safe_multicell(pdf,f"- {stat['Column']}: Min={stat['Min']}, Max={stat['Max']}, Avg={stat['Avg']}")
+            # Write column insights to README
+            with open(readme_path, "a", encoding="utf-8") as f:
+                f.write(f"Column Name: {col}\n")
+                f.write(f"Data Type: {df[col].dtype}\n")
+                f.write(f"Total Values: {total}\n")
+                f.write(f"Missing Values: {missing}\n")
+                f.write(f"Missing Percentage: {missing_pct}%\n")
+                f.write(f"Unique Values: {unique}\n")
+                f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
 
-        if show_corr and len(numeric_cols)>1:
+            # Write column insights to PDF
+            pdf.multi_cell(
+                0, 7,
+                f"Column Name: {col}\n"
+                f"Data Type: {df[col].dtype}\n"
+                f"Total Values: {total}\n"
+                f"Missing Values: {missing}\n"
+                f"Missing Percentage: {missing_pct}%\n"
+                f"Unique Values: {unique}\n"
+                f"Sample Values: {', '.join(map(str, samples))}\n"
+                + "-" * 40
+            )
             pdf.ln(2)
-            safe_multicell(pdf,"Correlation Table:")
-            for i in corr.index:
-                row_str = ", ".join([f"{j}:{corr.loc[i,j]}" for j in corr.columns])
-                safe_multicell(pdf,f"{i}: {row_str}")
 
-        pdf.ln(2)
-        safe_multicell(pdf,f"ML Readiness Score: {ml_ready_score}/100")
-        if numeric_cols and len(numeric_cols)>1:
-            safe_multicell(pdf,"Suggested Algorithms (Numeric/Regression): Linear Regression, Random Forest Regressor, Gradient Boosting")
-        if categorical_cols:
-            safe_multicell(pdf,"Suggested Algorithms (Categorical/Classification): Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
-        if numeric_cols and not categorical_cols:
-            safe_multicell(pdf,"Suggested Algorithms (Unsupervised/Clustering): KMeans, DBSCAN, Hierarchical Clustering")
+            # If numeric column, add graph + min/max
+            if col in numeric_cols:
+                series = df[col]
+                min_value = series.min()
+                max_value = series.max()
 
-        # Export PDF
-        pdf_bytes = io.BytesIO()
-        pdf.output(pdf_bytes)
-        pdf_bytes.seek(0)
+                # ---------- Graph ----------
+                plt.figure(figsize=(8, 4))
+                plt.plot(series, marker='o', label=col)
+                plt.axhline(min_value, color='red', linestyle='--', label=f'Min: {min_value}')
+                plt.axhline(max_value, color='green', linestyle='--', label=f'Max: {max_value}')
+                plt.title(f"{col} with Min & Max")
+                plt.xlabel("Index")
+                plt.ylabel(col)
+                plt.legend()
+                plt.grid(True)
+                plt.tight_layout()
 
-        st.download_button(
-            label="⬇️⬇️ Download PDF Report ⬇️⬇️",
-            data=pdf_bytes,
-            file_name="Auto_Documenter_Report.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+                graph_file = f"output/{col}.png"
+                plt.savefig(graph_file)
+                plt.close()
+                graph_paths.append(graph_file)
+
+                # ---------- Add min/max to README ----------
+                with open(readme_path, "a", encoding="utf-8") as f:
+                    f.write(f"Minimum Value: {min_value}\n")
+                    f.write(f"Maximum Value: {max_value}\n")
+                    f.write(f"![{col}]({graph_file})\n\n")
+
+                # ---------- Add min/max + graph to PDF ----------
+                pdf.set_font("Arial", "B", 12)
+                pdf.cell(0, 8, f"{col} Min & Max", ln=True)
+                pdf.set_font("Arial", "", 11)
+                pdf.cell(0, 7, f"Minimum Value: {min_value}", ln=True)
+                pdf.cell(0, 7, f"Maximum Value: {max_value}", ln=True)
+                pdf.ln(2)
+                pdf.image(graph_file, x=10, y=None, w=180)
+                pdf.ln(5)
+
+        # ---------- SAVE PDF ----------
+        pdf.output("output/report.pdf")
+
+        return {"summary": summary, "graphs": graph_paths}
+
+    except Exception as e:
+        return {"error": str(e)}
