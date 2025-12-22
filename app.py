@@ -72,8 +72,8 @@ if uploaded_file:
         numeric_cols = df_preview.select_dtypes(include=np.number).columns.tolist()
         categorical_cols = df_preview.select_dtypes(exclude=np.number).columns.tolist()
 
-        completeness = round((df_preview.notna().sum().sum() / (rows * cols)) * 100, 2) if (rows * cols) > 0 else 0
-        duplicate_pct = round((df_preview.duplicated().sum() / rows) * 100, 2) if rows > 0 else 0
+        completeness = round((df_preview.notna().sum().sum() / (rows * cols)) * 100, 2)
+        duplicate_pct = round((df_preview.duplicated().sum() / rows) * 100, 2)
 
         # ---------- METRIC CARDS ----------
         st.markdown("## 📊 Dataset Metrics")
@@ -87,8 +87,8 @@ if uploaded_file:
         health_score = round(
             (completeness * 0.5) +
             ((100 - duplicate_pct) * 0.2) +
-            (min(len(numeric_cols) / cols, 1) * 100 * 0.15 if cols > 0 else 0) +
-            (min(len(categorical_cols) / cols, 1) * 100 * 0.15 if cols > 0 else 0),
+            (min(len(numeric_cols) / cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols) / cols, 1) * 100 * 0.15),
             2
         )
 
@@ -121,7 +121,7 @@ if uploaded_file:
                         f"""
                         <div style="padding:15px;border-radius:14px;
                         background:linear-gradient(135deg,#1d2671,#c33764);
-                        color:white; margin-bottom:10px;">
+                        color:white;">
                         <h4>{col}</h4>
                         <p>⬇ Min: {col_min}</p>
                         <p>⬆ Max: {col_max}</p>
@@ -150,65 +150,41 @@ if uploaded_file:
             with st.expander("📋 Correlation Table", expanded=False):
                 st.dataframe(corr, use_container_width=True)
 
-            for i_col in corr.columns:
-                for j_col in corr.columns:
-                    if i_col != j_col and abs(corr.loc[i_col, j_col]) > 0.7:
-                        if (j_col, i_col, corr.loc[i_col, j_col]) not in strong_corrs:
-                            strong_corrs.append((i_col, j_col, corr.loc[i_col, j_col]))
+            for i in corr.columns:
+                for j in corr.columns:
+                    if i != j and abs(corr.loc[i, j]) > 0.7:
+                        strong_corrs.append((i, j, corr.loc[i, j]))
 
-        # ---------- PDF REPORT GENERATION ----------
+        # ---------- PDF REPORT (FPDF2 Unicode-safe) ----------
         st.markdown("## 📝 Full PDF Report")
         pdf = FPDF()
         pdf.add_page()
-        
-        # Use standard Helvetica font to avoid FileNotFoundError
-        pdf.set_font("helvetica", "B", 16)
+        # Add UTF-8 font
+        pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+        pdf.set_font("DejaVu", "", 14)
+
         pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
-        
-        pdf.set_font("helvetica", "", 12)
-        pdf.ln(10)
-        
-        # Using write() instead of multi_cell() to avoid "Not enough horizontal space" errors
-        pdf.write(8, f"Rows: {rows}\n")
-        pdf.write(8, f"Columns: {cols}\n")
-        pdf.write(8, f"Numeric Columns: {len(numeric_cols)}\n")
-        pdf.write(8, f"Categorical Columns: {len(categorical_cols)}\n")
         pdf.ln(5)
-        pdf.write(8, f"Overall Data Health Score: {health_score} / 100\n")
+        pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
+        pdf.ln(3)
+        pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100")
 
         # Column stats
-        if numeric_cols:
-            pdf.ln(10)
-            pdf.set_font("helvetica", "B", 14)
-            pdf.cell(0, 10, "Column Statistics (Min/Max/Avg):", ln=True)
-            pdf.set_font("helvetica", "", 11)
-            for col in numeric_cols:
-                try:
-                    c_min = str(df_preview[col].min())
-                    c_max = str(df_preview[col].max())
-                    c_avg = str(round(df_preview[col].mean(), 2))
-                    pdf.write(7, f"- {str(col)}: Min={c_min}, Max={c_max}, Avg={c_avg}\n")
-                except:
-                    continue
+        pdf.ln(2)
+        pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
+        for col in numeric_cols:
+            pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
 
-        # Insights
-        if strong_corrs:
-            pdf.ln(10)
-            pdf.set_font("helvetica", "B", 14)
-            pdf.cell(0, 10, "Strong Correlations Detected:", ln=True)
-            pdf.set_font("helvetica", "", 11)
-            for i_corr in strong_corrs:
-                pdf.write(7, f"- {str(i_corr[0])} & {str(i_corr[1])}: {str(i_corr[2])}\n")
+        # Insights & Recommendations
+        pdf.ln(2)
+        pdf.multi_cell(0, 6, "Auto Insights:")
+        for i in strong_corrs:
+            pdf.multi_cell(0, 6, f"- {i}")
 
         # Export PDF using BytesIO
-        # Using dest='S' returns the document as a string/byte string
-        pdf_output = pdf.output(dest='S')
-        
-        # Ensure we have bytes for the download button
-        if isinstance(pdf_output, str):
-            pdf_bytes = pdf_output.encode('latin-1', errors='replace')
-        else:
-            pdf_bytes = pdf_output
+        pdf_bytes = io.BytesIO()
+        pdf.output(pdf_bytes)
+        pdf_bytes.seek(0)
 
         st.download_button(
             label="📥 Download Full PDF Report",
