@@ -9,7 +9,6 @@ import streamlit as st
 # ---------- ANALYSIS FUNCTION ----------
 def analyze_file(file_path, file_name):
     os.makedirs("output", exist_ok=True)
-
     ext = os.path.splitext(file_name)[1].lower()
 
     try:
@@ -214,7 +213,7 @@ def analyze_file(file_path, file_name):
 st.title("📄 Auto-Documenter")
 st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-# Single uploader with unique key to avoid duplicate ID error
+# ---------- SINGLE FILE UPLOADER WITH UNIQUE KEY ----------
 uploaded_file = st.file_uploader(
     "Choose a file",
     type=["csv", "xlsx", "xls", "json", "py"],
