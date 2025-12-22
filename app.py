@@ -223,43 +223,41 @@ if uploaded_file:
             st.write("- KMeans, DBSCAN, Hierarchical Clustering")
 
         # ---------- PDF REPORT ----------
-        st.markdown("## 📝 Generate Full PDF Report")
-        if st.button("📥 Download Full PDF Report", key="pdf_button"):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
-            pdf.ln(5)
-            pdf.set_font("Arial", '', 12)
-            pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
-            pdf.ln(3)
-            pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100\nML Readiness Score: {ml_ready_score} / 100")
-            pdf.ln(3)
+        st.markdown("## 📝 Full PDF Report")
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
+        pdf.ln(5)
+        pdf.set_font("Arial", '', 12)
+        pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
+        pdf.ln(3)
+        pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100\nML Readiness Score: {ml_ready_score} / 100")
+        pdf.ln(3)
 
-            pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
-            for col in numeric_cols:
-                pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
+        pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
+        for col in numeric_cols:
+            pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
 
-            pdf.ln(2)
-            pdf.multi_cell(0, 6, "Auto Insights:")
-            for i in insights:
-                pdf.multi_cell(0, 6, f"- {i}")
-            pdf.ln(2)
-            pdf.multi_cell(0, 6, "Recommendations:")
-            for r in recommendations:
-                pdf.multi_cell(0, 6, f"- {r}")
-            pdf.ln(2)
-            pdf.multi_cell(0, 6, "Strong Correlations:")
-            for a, b, v in strong_corrs:
-                pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
+        pdf.ln(2)
+        pdf.multi_cell(0, 6, "Auto Insights:")
+        for i in insights:
+            pdf.multi_cell(0, 6, f"- {i}")
+        pdf.ln(2)
+        pdf.multi_cell(0, 6, "Recommendations:")
+        for r in recommendations:
+            pdf.multi_cell(0, 6, f"- {r}")
+        pdf.ln(2)
+        pdf.multi_cell(0, 6, "Strong Correlations:")
+        for a, b, v in strong_corrs:
+            pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
 
-            # Correct way to generate PDF for Streamlit download
-            pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-            st.download_button(
-                label="⬇️ DOWNLOAD FULL PDF REPORT",
-                data=pdf_bytes,
-                file_name="Auto_Documenter_Full_Report.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        st.download_button(
+            label="📥 Download Full PDF Report",
+            data=pdf_bytes,
+            file_name="Auto_Documenter_Full_Report.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
