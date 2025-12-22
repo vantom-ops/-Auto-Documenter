@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from fpdf import FPDF
 import matplotlib.pyplot as plt
+import numpy as np
 
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
@@ -27,8 +28,7 @@ def analyze_file(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
 
-            readme_path = "output/README.md"
-            with open(readme_path, "w", encoding="utf-8") as f:
+            with open("output/README.md", "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
@@ -38,116 +38,114 @@ def analyze_file(file_path):
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- BASIC SUMMARY ----------
-        summary = {
-            "rows": len(df),
-            "columns": len(df.columns),
-            "column_names": list(df.columns)
-        }
+        # ---------- BASIC STATS ----------
+        rows, cols = df.shape
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
-        # ---------- GRAPH GENERATION ----------
-        graph_paths = []
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        for col in numeric_cols:
-            plt.figure(figsize=(8, 4))
-            series = df[col]
-            plt.plot(series, marker='o', label=col)
+        completeness = round((df.notna().sum().sum() / (rows * cols)) * 100, 2)
+        duplicate_pct = round((df.duplicated().sum() / rows) * 100, 2)
 
-            # Highlight min & max
-            min_idx = series.idxmin()
-            max_idx = series.idxmax()
-            plt.scatter(min_idx, series[min_idx], color='red', label='Min', zorder=5, s=80)
-            plt.scatter(max_idx, series[max_idx], color='green', label='Max', zorder=5, s=80)
+        high_missing_cols = [
+            col for col in df.columns if df[col].isna().mean() * 100 > 50
+        ]
 
-            plt.title(f"{col} with Min & Max")
-            plt.xlabel("Index")
-            plt.ylabel(col)
-            plt.legend()
-            plt.grid(True)
-            plt.tight_layout()
+        # ---------- MODEL READINESS SCORE ----------
+        model_readiness = round(
+            (completeness * 0.5) +
+            ((100 - duplicate_pct) * 0.2) +
+            (min(len(numeric_cols) / cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols) / cols, 1) * 100 * 0.15),
+            2
+        )
 
-            graph_file = f"output/{col}.png"
-            plt.savefig(graph_file)
-            plt.close()
-            graph_paths.append(graph_file)
+        # ---------- EXECUTIVE SUMMARY ----------
+        exec_summary = f"""
+This dataset contains {rows} rows and {cols} columns.
+Overall completeness is {completeness}% with {duplicate_pct}% duplicate records.
 
-        # ---------- README WITH SMART INSIGHTS ----------
-        readme_path = "output/README.md"
-        with open(readme_path, "w", encoding="utf-8") as f:
-            f.write("AUTO GENERATED DOCUMENTATION\n\n")
-            f.write(f"File Name: {file_name}\n\n")
-            f.write(f"Total Rows: {summary['rows']}\n")
-            f.write(f"Total Columns: {summary['columns']}\n\n")
-            f.write("COLUMN INSIGHTS\n\n")
+The dataset has {len(numeric_cols)} numeric and {len(categorical_cols)} categorical features.
 
-            for col in df.columns:
-                total = len(df[col])
-                missing = df[col].isna().sum()
-                missing_pct = round((missing / total) * 100, 2)
-                unique = df[col].nunique(dropna=True)
-                samples = df[col].dropna().unique()[:5]
+Model readiness score is {model_readiness}/100.
+"""
 
-                f.write(f"Column Name: {col}\n")
-                f.write(f"Data Type: {df[col].dtype}\n")
-                f.write(f"Total Values: {total}\n")
-                f.write(f"Missing Values: {missing}\n")
-                f.write(f"Missing Percentage: {missing_pct}%\n")
-                f.write(f"Unique Values: {unique}\n")
-                f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
-                f.write("-" * 40 + "\n")
+        if high_missing_cols:
+            exec_summary += f"\nHigh missing columns detected: {', '.join(high_missing_cols)}."
 
-            # Add graphs to README
-            if graph_paths:
-                f.write("\nGRAPHS\n\n")
-                for g in graph_paths:
-                    f.write(f"![{os.path.basename(g)}]({g})\n\n")
+        if model_readiness >= 80:
+            exec_summary += "\nThe dataset is well-suited for machine learning."
+        elif model_readiness >= 60:
+            exec_summary += "\nThe dataset requires moderate cleaning before modeling."
+        else:
+            exec_summary += "\nThe dataset needs significant preprocessing before modeling."
 
-        # ---------- PDF GENERATION ----------
+        # ---------- INIT PDF ----------
         pdf = FPDF()
         pdf.add_page()
-
         pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, "AUTO GENERATED DOCUMENTATION", ln=True)
+        pdf.cell(0, 10, "AUTO GENERATED DATA REPORT", ln=True)
+        pdf.ln(5)
 
-        pdf.set_font("Arial", "", 12)
-        pdf.ln(4)
-        pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
-        pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
-        pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
-
-        pdf.ln(6)
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
-
+        # ---------- DATASET OVERVIEW ----------
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Dataset Overview", ln=True)
         pdf.set_font("Arial", "", 11)
-        for col in df.columns:
-            total = len(df[col])
-            missing = df[col].isna().sum()
-            missing_pct = round((missing / total) * 100, 2)
-            unique = df[col].nunique(dropna=True)
-            samples = df[col].dropna().unique()[:5]
+        pdf.multi_cell(
+            0, 8,
+            f"File Name: {file_name}\n"
+            f"Rows: {rows}\n"
+            f"Columns: {cols}\n"
+            f"Completeness: {completeness}%\n"
+            f"Duplicate Rows: {duplicate_pct}%\n"
+        )
 
+        # ---------- EXECUTIVE SUMMARY PAGE ----------
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Executive Summary", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(0, 8, exec_summary)
+
+        # ---------- MODEL READINESS ----------
+        pdf.ln(5)
+        pdf.set_font("Arial", "B", 13)
+        pdf.cell(0, 10, "Model Readiness Assessment", ln=True)
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(
+            0, 8,
+            f"Model Readiness Score: {model_readiness}/100\n"
+            f"Numeric Features: {len(numeric_cols)}\n"
+            f"Categorical Features: {len(categorical_cols)}"
+        )
+
+        # ---------- COLUMN STATS ----------
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Column Statistics", ln=True)
+        pdf.set_font("Arial", "", 11)
+
+        for col in numeric_cols:
             pdf.multi_cell(
                 0, 7,
-                f"Column Name: {col}\n"
-                f"Data Type: {df[col].dtype}\n"
-                f"Total Values: {total}\n"
-                f"Missing Values: {missing}\n"
-                f"Missing Percentage: {missing_pct}%\n"
-                f"Unique Values: {unique}\n"
-                f"Sample Values: {', '.join(map(str, samples))}\n"
+                f"{col}\n"
+                f"Min: {df[col].min()}\n"
+                f"Max: {df[col].max()}\n"
+                f"Avg: {round(df[col].mean(),2)}\n"
                 + "-" * 40
             )
-            pdf.ln(2)
 
-        # Add graphs to PDF
-        for g in graph_paths:
-            pdf.add_page()
-            pdf.image(g, x=10, y=20, w=180)
-
+        # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths}
+        # ---------- RETURN ----------
+        return {
+            "summary": {
+                "rows": rows,
+                "columns": cols,
+                "completeness": completeness,
+                "model_readiness": model_readiness
+            }
+        }
 
     except Exception as e:
         return {"error": str(e)}
