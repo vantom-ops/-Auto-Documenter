@@ -74,7 +74,18 @@ if uploaded_file:
             col2.metric("📂 Columns", cols)
             col3.metric("🔢 Numeric Columns", numeric_count)
             col4.metric("🗂 Categorical Columns", categorical_count)
-            st.metric("✅ Completeness (%)", completeness)
+
+            # ---------- COMPLETENESS GRADIENT BAR ----------
+            st.markdown("### ✅ Completeness (%)")
+            st.markdown(
+                f"""
+                <div style="background:#eee; width:100%; height:25px; border-radius:5px; overflow:hidden;">
+                    <div style="background:linear-gradient(to right, red, yellow, green); width:{completeness}%; height:25px;"></div>
+                </div>
+                <div style="text-align:center; font-weight:bold;">{completeness}% Complete</div>
+                """,
+                unsafe_allow_html=True
+            )
 
             # ---------- WARNINGS ----------
             warnings = []
@@ -90,7 +101,7 @@ if uploaded_file:
             else:
                 st.success("No major warnings detected ✅")
 
-            # ---------- COLUMN MIN/MAX (Attractive) ----------
+            # ---------- COLUMN MIN/MAX (Attractive Gradient) ----------
             st.markdown("### 📌 Column Min/Max")
             for col in numeric_cols:
                 series = df_preview[col]
@@ -104,7 +115,7 @@ if uploaded_file:
                     <div style="display:flex; align-items:center; gap:10px;">
                         <span style="color:blue;">Min: {min_val}</span>
                         <div style="background:#eee; width:100%; height:15px; border-radius:5px; overflow:hidden;">
-                            <div style="background:linear-gradient(to right, blue 0%, green 100%); height:15px;"></div>
+                            <div style="background:linear-gradient(to right, blue, green); height:15px;"></div>
                         </div>
                         <span style="color:green;">Max: {max_val}</span>
                     </div>
@@ -123,8 +134,10 @@ if uploaded_file:
             if show_corr and numeric_count > 1:
                 with st.expander("🔥 Correlation Heatmap", expanded=True):
                     corr_df = df_preview[numeric_cols].corr()
+                    st.markdown("#### Correlation Table")
                     st.dataframe(corr_df.style.background_gradient(cmap="coolwarm").format("{:.2f}"))
 
+                    st.markdown("#### Correlation Heatmap")
                     plt.figure(figsize=(10, 6))
                     sns.heatmap(corr_df, annot=True, cmap="coolwarm", linewidths=0.5)
                     st.pyplot(plt)
