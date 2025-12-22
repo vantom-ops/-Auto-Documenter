@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 from parser import analyze_file
 import os
 import numpy as np
+from fpdf import FPDF
+import io
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -107,10 +109,13 @@ if uploaded_file:
             st.success("🎉 No major data quality issues detected")
 
         # ---------- COLUMN STATISTICS ----------
-        with st.expander("📌 Column Statistics", expanded=False):
+        with st.expander("📌 Column Statistics (Min, Max, Avg)", expanded=False):
             grid = st.columns(3)
             i = 0
             for col in numeric_cols:
+                col_min = df_preview[col].min()
+                col_max = df_preview[col].max()
+                col_avg = round(df_preview[col].mean(), 2)
                 with grid[i % 3]:
                     st.markdown(
                         f"""
@@ -118,9 +123,9 @@ if uploaded_file:
                         background:linear-gradient(135deg,#1d2671,#c33764);
                         color:white;">
                         <h4>{col}</h4>
-                        <p>⬇ Min: {df_preview[col].min()}</p>
-                        <p>⬆ Max: {df_preview[col].max()}</p>
-                        <p>📊 Avg: {round(df_preview[col].mean(),2)}</p>
+                        <p>⬇ Min: {col_min}</p>
+                        <p>⬆ Max: {col_max}</p>
+                        <p>📊 Avg: {col_avg}</p>
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -196,14 +201,67 @@ if uploaded_file:
         for r in recommendations:
             st.success(r)
 
-        # ---------- BIG DOWNLOAD PDF ----------
-        pdf_path = "output/report.pdf"
-        if os.path.exists(pdf_path):
-            st.markdown("## 📥 Export Report")
+        # ---------- ML READINESS SCORE & ALGORITHM SUGGESTIONS ----------
+        st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
+
+        ml_ready_score = round(
+            (completeness * 0.4) +
+            ((100 - duplicate_pct) * 0.3) +
+            (min(len(numeric_cols)/cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/cols, 1) * 100 * 0.15),
+            2
+        )
+        st.metric("ML Readiness Score", f"{ml_ready_score} / 100")
+
+        if numeric_cols and len(numeric_cols) > 1:
+            st.subheader("Suggested Algorithms (Numeric/Regression)")
+            st.write("- Linear Regression, Random Forest Regressor, Gradient Boosting")
+        if categorical_cols:
+            st.subheader("Suggested Algorithms (Categorical/Classification)")
+            st.write("- Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
+        if numeric_cols and not categorical_cols:
+            st.subheader("Suggested Algorithms (Unsupervised/Clustering)")
+            st.write("- KMeans, DBSCAN, Hierarchical Clustering")
+
+        # ---------- PDF REPORT ----------
+        st.markdown("## 📝 Generate Full PDF Report")
+        if st.button("Generate Full PDF"):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
+            pdf.ln(5)
+            pdf.set_font("Arial", '', 12)
+            pdf.multi_cell(0, 6, f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
+            pdf.ln(3)
+            pdf.multi_cell(0, 6, f"Data Health Score: {health_score} / 100\nML Readiness Score: {ml_ready_score} / 100")
+            pdf.ln(3)
+
+            pdf.multi_cell(0, 6, "Column Statistics (Min/Max/Avg):")
+            for col in numeric_cols:
+                pdf.multi_cell(0, 6, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
+
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Auto Insights:")
+            for i in insights:
+                pdf.multi_cell(0, 6, f"- {i}")
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Recommendations:")
+            for r in recommendations:
+                pdf.multi_cell(0, 6, f"- {r}")
+            pdf.ln(2)
+            pdf.multi_cell(0, 6, "Strong Correlations:")
+            for a, b, v in strong_corrs:
+                pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
+
+            pdf_output = io.BytesIO()
+            pdf.output(pdf_output)
+            pdf_output.seek(0)
+
             st.download_button(
-                label="⬇️ DOWNLOAD FULL PDF REPORT",
-                data=open(pdf_path, "rb").read(),
-                file_name="Auto_Documenter_Report.pdf",
+                label="⬇️ Download Generated PDF",
+                data=pdf_output,
+                file_name="Auto_Documenter_Full_Report.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
