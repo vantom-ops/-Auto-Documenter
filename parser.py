@@ -1,74 +1,52 @@
 import os
 import pandas as pd
 import json
-import matplotlib.pyplot as plt
 from fpdf import FPDF
-import streamlit as st
+import matplotlib.pyplot as plt
 
-# ---------- ANALYSIS FUNCTION ----------
-def analyze_file(file_path, file_name):
+def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
+
+    file_name = os.path.basename(file_path)
     ext = os.path.splitext(file_name)[1].lower()
 
     try:
         # ---------- READ FILE ----------
         if ext == ".csv":
             df = pd.read_csv(file_path, low_memory=False)
+
         elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
+
         elif ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             df = pd.json_normalize(data)
+
         elif ext == ".py":
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
-            readme_path = os.path.join("output", "README.md")
+
+            readme_path = "output/README.md"
             with open(readme_path, "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
+
             return {"file": file_name, "type": "python"}
+
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- COLUMN TYPES ----------
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        categorical_cols = df.select_dtypes(exclude=['number']).columns
-        numeric_count = len(numeric_cols)
-        categorical_count = len(categorical_cols)
-        numeric_ratio = round((numeric_count / len(df.columns)) * 100, 2)
-        categorical_ratio = round((categorical_count / len(df.columns)) * 100, 2)
-
         # ---------- BASIC SUMMARY ----------
-        total_cells = df.size
-        total_missing = df.isna().sum().sum()
-        completeness = round(((total_cells - total_missing) / total_cells) * 100, 2)
-
         summary = {
             "rows": len(df),
             "columns": len(df.columns),
-            "column_names": list(df.columns),
-            "numeric_count": numeric_count,
-            "categorical_count": categorical_count,
-            "numeric_ratio": numeric_ratio,
-            "categorical_ratio": categorical_ratio,
-            "completeness": completeness
+            "column_names": list(df.columns)
         }
 
-        # ---------- WARNINGS ----------
-        warnings = []
-        high_missing_cols = df.columns[df.isna().mean() > 0.5].tolist()
-        many_unique_cols = df.columns[df.nunique() > 50].tolist()
-        if high_missing_cols:
-            warnings.append(f"High missing data in columns: {', '.join(high_missing_cols)}")
-        if many_unique_cols:
-            warnings.append(f"Columns with >50 unique values: {', '.join(many_unique_cols)}")
-        if not warnings:
-            warnings.append("No major warnings detected.")
-
         # ---------- INIT README ----------
-        readme_path = os.path.join("output", "README.md")
+        readme_path = "output/README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write("AUTO GENERATED DOCUMENTATION\n\n")
             f.write(f"File Name: {file_name}\n\n")
@@ -91,12 +69,10 @@ def analyze_file(file_path, file_name):
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
 
-        # ---------- CREATE GRAPH FOLDER ----------
-        graph_folder = os.path.join("output", "numeric_charts")
-        os.makedirs(graph_folder, exist_ok=True)
+        # ---------- GRAPH GENERATION + TEXT ----------
+        numeric_cols = df.select_dtypes(include=['number']).columns
         graph_paths = []
 
-        # ---------- COLUMN INSIGHTS + GRAPHS ----------
         for col in df.columns:
             total = len(df[col])
             missing = df[col].isna().sum()
@@ -104,7 +80,7 @@ def analyze_file(file_path, file_name):
             unique = df[col].nunique(dropna=True)
             samples = df[col].dropna().unique()[:5]
 
-            # ---------- README ----------
+            # Write column insights to README
             with open(readme_path, "a", encoding="utf-8") as f:
                 f.write(f"Column Name: {col}\n")
                 f.write(f"Data Type: {df[col].dtype}\n")
@@ -114,7 +90,7 @@ def analyze_file(file_path, file_name):
                 f.write(f"Unique Values: {unique}\n")
                 f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
 
-            # ---------- PDF ----------
+            # Write column insights to PDF
             pdf.multi_cell(
                 0, 7,
                 f"Column Name: {col}\n"
@@ -128,12 +104,13 @@ def analyze_file(file_path, file_name):
             )
             pdf.ln(2)
 
-            # ---------- NUMERIC COLUMN GRAPHS + MIN/MAX ----------
+            # If numeric column, add graph + min/max
             if col in numeric_cols:
                 series = df[col]
                 min_value = series.min()
                 max_value = series.max()
 
+                # ---------- Graph ----------
                 plt.figure(figsize=(8, 4))
                 plt.plot(series, marker='o', label=col)
                 plt.axhline(min_value, color='red', linestyle='--', label=f'Min: {min_value}')
@@ -145,18 +122,18 @@ def analyze_file(file_path, file_name):
                 plt.grid(True)
                 plt.tight_layout()
 
-                graph_file = os.path.join(graph_folder, f"{col}.png")
+                graph_file = f"output/{col}.png"
                 plt.savefig(graph_file)
                 plt.close()
                 graph_paths.append(graph_file)
 
-                # Add min/max to README
+                # ---------- Add min/max to README ----------
                 with open(readme_path, "a", encoding="utf-8") as f:
                     f.write(f"Minimum Value: {min_value}\n")
                     f.write(f"Maximum Value: {max_value}\n")
                     f.write(f"![{col}]({graph_file})\n\n")
 
-                # Add min/max + graph to PDF
+                # ---------- Add min/max + graph to PDF ----------
                 pdf.set_font("Arial", "B", 12)
                 pdf.cell(0, 8, f"{col} Min & Max", ln=True)
                 pdf.set_font("Arial", "", 11)
@@ -166,65 +143,10 @@ def analyze_file(file_path, file_name):
                 pdf.image(graph_file, x=10, y=None, w=180)
                 pdf.ln(5)
 
-        # ---------- STEP 3: DATASET HEALTH SCORE ----------
-        with open(readme_path, "a", encoding="utf-8") as f:
-            f.write("\nDATASET HEALTH SCORE\n\n")
-            f.write(f"Completeness Score: {summary['completeness']}%\n")
-            f.write(f"Numeric Columns: {summary['numeric_count']} ({summary['numeric_ratio']}%)\n")
-            f.write(f"Categorical Columns: {summary['categorical_count']} ({summary['categorical_ratio']}%)\n")
-            f.write("Warnings:\n")
-            for w in warnings:
-                f.write(f"- {w}\n")
-
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "DATASET HEALTH SCORE", ln=True)
-        pdf.set_font("Arial", "", 12)
-        pdf.cell(0, 8, f"Completeness Score: {summary['completeness']}%", ln=True)
-        pdf.cell(0, 8, f"Numeric Columns: {summary['numeric_count']} ({summary['numeric_ratio']}%)", ln=True)
-        pdf.cell(0, 8, f"Categorical Columns: {summary['categorical_count']} ({summary['categorical_ratio']}%)", ln=True)
-        pdf.ln(4)
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, "Warnings:", ln=True)
-        pdf.set_font("Arial", "", 11)
-        for w in warnings:
-            pdf.multi_cell(0, 7, f"- {w}")
-        pdf.ln(5)
-
         # ---------- SAVE PDF ----------
-        pdf_file_path = os.path.join("output", "report.pdf")
-        pdf.output(pdf_file_path)
+        pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "warnings": warnings}
+        return {"summary": summary, "graphs": graph_paths}
 
     except Exception as e:
         return {"error": str(e)}
-
-
-# ---------- STREAMLIT APP ----------
-st.title("📄 Auto-Documenter")
-st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
-
-# ---------- SINGLE FILE UPLOADER ----------
-uploaded_file = st.file_uploader(
-    "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"],
-    key="unique_file_uploader"
-)
-
-if uploaded_file:
-    st.info("Processing file... ⏳")
-
-    # Save uploaded file temporarily
-    os.makedirs("output", exist_ok=True)
-    temp_path = os.path.join("output", uploaded_file.name)
-    with open(temp_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    # Run analysis (pass both file_path and file_name)
-    result = analyze_file(temp_path, uploaded_file.name)
-
-    if "error" in result:
-        st.error(result["error"])
-    else:
-        st.success("✅ File processed successfully!")
-        st.json(result)
