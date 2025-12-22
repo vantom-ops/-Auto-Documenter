@@ -1,3 +1,7 @@
-pandas>=2.0
-fpdf>=1.7.2
-matplotlib>=3.7
+pandas
+matplotlib
+fpdf
+openpyxl
+streamlit
+seaborn
+plotly
