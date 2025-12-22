@@ -36,6 +36,15 @@ uploaded_file = st.file_uploader(
     type=["csv", "xlsx", "xls", "json", "py"]
 )
 
+def safe_multicell(pdf, text, width=0, line_height=6):
+    """Write text safely to PDF by splitting extremely long words."""
+    safe_text = ""
+    for word in text.split(" "):
+        if len(word) > 50:
+            word = "\u200B".join([word[i:i+50] for i in range(0, len(word), 50)])
+        safe_text += word + " "
+    pdf.multi_cell(width, line_height, safe_text.strip())
+
 if uploaded_file:
 
     # ---------- LOAD FILE ----------
@@ -72,7 +81,6 @@ if uploaded_file:
         rows, cols = df_preview.shape
         numeric_cols = df_preview.select_dtypes(include=np.number).columns.tolist()
         categorical_cols = df_preview.select_dtypes(exclude=np.number).columns.tolist()
-
         completeness = round((df_preview.notna().sum().sum() / (rows * cols)) * 100, 2)
         duplicate_pct = round((df_preview.duplicated().sum() / rows) * 100, 2)
 
@@ -84,17 +92,16 @@ if uploaded_file:
         c3.metric("Numeric", len(numeric_cols))
         c4.metric("Categorical", len(categorical_cols))
 
-        # ---------- OVERALL DATA HEALTH SCORE ----------
+        # ---------- DATA HEALTH SCORE ----------
         health_score = round(
             (completeness * 0.5) +
             ((100 - duplicate_pct) * 0.2) +
-            (min(len(numeric_cols) / cols, 1) * 100 * 0.15) +
-            (min(len(categorical_cols) / cols, 1) * 100 * 0.15),
+            (min(len(numeric_cols)/cols,1)*100*0.15) +
+            (min(len(categorical_cols)/cols,1)*100*0.15),
             2
         )
-
         st.markdown("## 🏥 Overall Data Health Score")
-        st.progress(health_score / 100)
+        st.progress(health_score/100)
         st.metric("Health Score", f"{health_score} / 100")
 
         # ---------- WARNINGS ----------
@@ -105,19 +112,17 @@ if uploaded_file:
             if miss > 50:
                 high_missing_cols.append(col)
                 st.warning(f"{col} has {round(miss,2)}% missing values")
-
         if not high_missing_cols:
             st.success("🎉 No major data quality issues detected")
 
         # ---------- COLUMN STATISTICS ----------
         with st.expander("📌 Column Statistics (Min, Max, Avg)", expanded=False):
             grid = st.columns(3)
-            i = 0
-            for col in numeric_cols:
+            for i, col in enumerate(numeric_cols):
                 col_min = df_preview[col].min()
                 col_max = df_preview[col].max()
-                col_avg = round(df_preview[col].mean(), 2)
-                with grid[i % 3]:
+                col_avg = round(df_preview[col].mean(),2)
+                with grid[i%3]:
                     st.markdown(
                         f"""
                         <div style="padding:15px;border-radius:14px;
@@ -128,10 +133,8 @@ if uploaded_file:
                         <p>⬆ Max: {col_max}</p>
                         <p>📊 Avg: {col_avg}</p>
                         </div>
-                        """,
-                        unsafe_allow_html=True
+                        """, unsafe_allow_html=True
                     )
-                i += 1
 
         # ---------- COLUMN GRAPHS ----------
         if show_graphs and numeric_cols:
@@ -147,51 +150,27 @@ if uploaded_file:
                 corr = df_preview[numeric_cols].corr().round(3)
                 fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
                 st.plotly_chart(fig, use_container_width=True)
-
             with st.expander("📋 Correlation Table", expanded=False):
                 st.dataframe(corr, use_container_width=True)
-
             for i in corr.columns:
                 for j in corr.columns:
-                    if i != j and abs(corr.loc[i, j]) > 0.7:
-                        strong_corrs.append((i, j, corr.loc[i, j]))
-
-        # ---------- RADAR CHART ----------
-        st.markdown("## 🕸 Data Health Radar")
-        radar_labels = ["Completeness", "Low Missing", "Low Duplicates", "Numeric Balance", "Categorical Balance"]
-        radar_values = [
-            completeness,
-            100 - (len(high_missing_cols) / cols * 100 if cols else 0),
-            100 - duplicate_pct,
-            min((len(numeric_cols) / cols) * 100, 100),
-            min((len(categorical_cols) / cols) * 100, 100)
-        ]
-
-        radar_fig = go.Figure(
-            go.Scatterpolar(r=radar_values, theta=radar_labels, fill='toself')
-        )
-        radar_fig.update_layout(polar=dict(radialaxis=dict(range=[0, 100])))
-        st.plotly_chart(radar_fig, use_container_width=True)
+                    if i != j and abs(corr.loc[i,j])>0.7:
+                        strong_corrs.append((i,j,corr.loc[i,j]))
 
         # ---------- AUTO INSIGHTS ----------
         st.markdown("## 🤖 Auto Insights")
-        insights = []
-        recommendations = []
-
-        if completeness < 80:
+        insights=[]
+        recommendations=[]
+        if completeness<80:
             insights.append("Dataset has low completeness.")
             recommendations.append("Consider imputing or removing missing values.")
-
         if strong_corrs:
             insights.append("Strong correlations detected.")
             recommendations.append("Check multicollinearity before modeling.")
-
-        if duplicate_pct > 5:
+        if duplicate_pct>5:
             recommendations.append("Remove duplicate rows to improve data quality.")
-
         for i in insights:
             st.info(i)
-
         st.markdown("### 🛠 Auto Recommendations")
         for r in recommendations:
             st.success(r)
@@ -199,84 +178,61 @@ if uploaded_file:
         # ---------- ML READINESS SCORE ----------
         st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
         ml_ready_score = round(
-            (completeness * 0.4) +
-            ((100 - duplicate_pct) * 0.3) +
-            (min(len(numeric_cols)/cols, 1) * 100 * 0.15) +
-            (min(len(categorical_cols)/cols, 1) * 100 * 0.15),
+            (completeness*0.4)+((100-duplicate_pct)*0.3)+
+            (min(len(numeric_cols)/cols,1)*100*0.15)+
+            (min(len(categorical_cols)/cols,1)*100*0.15),
             2
         )
-        st.metric("ML Readiness Score", f"{ml_ready_score} / 100")
+        st.metric("ML Readiness Score", f"{ml_ready_score}/100")
 
-        # ---------- PDF REPORT (wrapped text) ----------
+        if numeric_cols and len(numeric_cols)>1:
+            st.subheader("Suggested Algorithms (Numeric/Regression)")
+            st.write("- Linear Regression, Random Forest Regressor, Gradient Boosting")
+        if categorical_cols:
+            st.subheader("Suggested Algorithms (Categorical/Classification)")
+            st.write("- Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
+        if numeric_cols and not categorical_cols:
+            st.subheader("Suggested Algorithms (Unsupervised/Clustering)")
+            st.write("- KMeans, DBSCAN, Hierarchical Clustering")
+
+        # ---------- PDF REPORT ----------
         st.markdown("## 📝 Full PDF Report")
+
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=15)
         pdf.set_font("Arial", "", 12)
 
-        pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
+        pdf.cell(0,10,"Auto-Documenter Report",ln=True,align="C")
         pdf.ln(5)
-        pdf.multi_cell(0,6,f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
-        pdf.ln(3)
-        pdf.multi_cell(0,6,f"Data Health Score: {health_score} / 100\nML Readiness Score: {ml_ready_score} / 100")
+        safe_multicell(pdf,f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
         pdf.ln(2)
-
-        # Column stats
-        pdf.multi_cell(0,6,"Column Statistics (Min/Max/Avg):")
+        safe_multicell(pdf,f"Data Health Score: {health_score}/100")
+        pdf.ln(2)
+        safe_multicell(pdf,"Column Statistics (Min/Max/Avg):")
         for col in numeric_cols:
-            val_min = str(df_preview[col].min())
-            val_max = str(df_preview[col].max())
-            val_avg = str(round(df_preview[col].mean(),2))
-            line = f"- {col}: Min={val_min}, Max={val_max}, Avg={val_avg}"
-            for wrapped_line in textwrap.wrap(line, width=90):
-                pdf.multi_cell(0,6,wrapped_line)
+            safe_multicell(pdf,f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
+        pdf.ln(2)
+        safe_multicell(pdf,"Strong Correlations:")
+        for a,b,v in strong_corrs:
+            safe_multicell(pdf,f"- {a} ↔ {b}: {v}")
+        pdf.ln(2)
+        safe_multicell(pdf,"Insights:")
+        for i in insights:
+            safe_multicell(pdf,f"- {i}")
+        pdf.ln(2)
+        safe_multicell(pdf,"Recommendations:")
+        for r in recommendations:
+            safe_multicell(pdf,f"- {r}")
 
-        # Strong correlations
-        if strong_corrs:
-            pdf.ln(2)
-            pdf.multi_cell(0,6,"Strong Correlations:")
-            for a,b,v in strong_corrs:
-                line = f"- {a} ↔ {b}: {v}"
-                for wrapped_line in textwrap.wrap(line, width=90):
-                    pdf.multi_cell(0,6,wrapped_line)
+        # Export PDF using BytesIO
+        pdf_bytes = io.BytesIO()
+        pdf.output(pdf_bytes)
+        pdf_bytes.seek(0)
 
-        # Auto insights
-        if insights:
-            pdf.ln(2)
-            pdf.multi_cell(0,6,"Auto Insights:")
-            for i in insights:
-                for wrapped_line in textwrap.wrap(f"- {i}", width=90):
-                    pdf.multi_cell(0,6,wrapped_line)
-
-        # Recommendations
-        if recommendations:
-            pdf.ln(2)
-            pdf.multi_cell(0,6,"Recommendations:")
-            for r in recommendations:
-                for wrapped_line in textwrap.wrap(f"- {r}", width=90):
-                    pdf.multi_cell(0,6,wrapped_line)
-
-        # Export PDF to BytesIO
-        pdf_buffer = io.BytesIO()
-        pdf.output(pdf_buffer)
-        pdf_buffer.seek(0)
-
-        # Big download button
-        st.markdown(
-            """
-            <style>
-            div.stDownloadButton > button:first-child {
-                height: 60px;
-                font-size: 20px;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-
+        # ---------- BIG DOWNLOAD BUTTON ----------
         st.download_button(
-            label="📥 Download Full PDF Report",
-            data=pdf_buffer,
+            label="⬇️⬇️⬇️ Download Full PDF Report ⬇️⬇️⬇️",
+            data=pdf_bytes,
             file_name="Auto_Documenter_Full_Report.pdf",
             mime="application/pdf",
             use_container_width=True
