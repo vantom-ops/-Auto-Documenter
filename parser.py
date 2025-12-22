@@ -33,7 +33,7 @@ def analyze_file(file_path):
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
 
-            return {"file": file_name, "type": "python"}
+            return {"file": file_name, "type": "python", "dataframe": pd.DataFrame()}
 
         else:
             return {"error": "Unsupported file type"}
@@ -42,10 +42,7 @@ def analyze_file(file_path):
         summary = {
             "rows": len(df),
             "columns": len(df.columns),
-            "column_names": list(df.columns),
-            "numeric_count": len(df.select_dtypes(include=['number']).columns),
-            "categorical_count": len(df.select_dtypes(exclude=['number']).columns),
-            "completeness": round((1 - df.isna().sum().sum() / (df.shape[0] * df.shape[1])) * 100, 2)
+            "column_names": list(df.columns)
         }
 
         # ---------- INIT README ----------
@@ -149,12 +146,8 @@ def analyze_file(file_path):
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        # ---------- RETURN ALL METRICS ----------
-        return {
-            "summary": summary,
-            "graphs": graph_paths,
-            "dataframe": df  # returning dataframe for Step 5 preview
-        }
+        # Return the dataframe for Step 5 preview
+        return {"summary": summary, "graphs": graph_paths, "dataframe": df}
 
     except Exception as e:
         return {"error": str(e)}
