@@ -153,47 +153,60 @@ if uploaded_file:
             for i_col in corr.columns:
                 for j_col in corr.columns:
                     if i_col != j_col and abs(corr.loc[i_col, j_col]) > 0.7:
-                        # Add a check to avoid duplicate pairs like (A,B) and (B,A)
                         if (j_col, i_col, corr.loc[i_col, j_col]) not in strong_corrs:
                             strong_corrs.append((i_col, j_col, corr.loc[i_col, j_col]))
 
-        # ---------- PDF REPORT ----------
+        # ---------- PDF REPORT GENERATION ----------
         st.markdown("## 📝 Full PDF Report")
         pdf = FPDF()
         pdf.add_page()
         
-        # FIXED: Using built-in 'helvetica' instead of looking for external .ttf file
+        # Use standard Helvetica font to avoid FileNotFoundError
         pdf.set_font("helvetica", "B", 16)
         pdf.cell(0, 10, "Auto-Documenter Report", ln=True, align="C")
         
         pdf.set_font("helvetica", "", 12)
         pdf.ln(10)
-        pdf.multi_cell(0, 10, f"Rows: {rows}\nColumns: {cols}\nNumeric Columns: {len(numeric_cols)}\nCategorical Columns: {len(categorical_cols)}")
+        
+        # Using write() instead of multi_cell() to avoid "Not enough horizontal space" errors
+        pdf.write(8, f"Rows: {rows}\n")
+        pdf.write(8, f"Columns: {cols}\n")
+        pdf.write(8, f"Numeric Columns: {len(numeric_cols)}\n")
+        pdf.write(8, f"Categorical Columns: {len(categorical_cols)}\n")
         pdf.ln(5)
-        pdf.multi_cell(0, 10, f"Data Health Score: {health_score} / 100")
+        pdf.write(8, f"Overall Data Health Score: {health_score} / 100\n")
 
         # Column stats
-        pdf.ln(10)
-        pdf.set_font("helvetica", "B", 14)
-        pdf.cell(0, 10, "Column Statistics (Min/Max/Avg):", ln=True)
-        pdf.set_font("helvetica", "", 12)
-        for col in numeric_cols:
-            pdf.multi_cell(0, 8, f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
+        if numeric_cols:
+            pdf.ln(10)
+            pdf.set_font("helvetica", "B", 14)
+            pdf.cell(0, 10, "Column Statistics (Min/Max/Avg):", ln=True)
+            pdf.set_font("helvetica", "", 11)
+            for col in numeric_cols:
+                try:
+                    c_min = str(df_preview[col].min())
+                    c_max = str(df_preview[col].max())
+                    c_avg = str(round(df_preview[col].mean(), 2))
+                    pdf.write(7, f"- {str(col)}: Min={c_min}, Max={c_max}, Avg={c_avg}\n")
+                except:
+                    continue
 
         # Insights
         if strong_corrs:
             pdf.ln(10)
             pdf.set_font("helvetica", "B", 14)
             pdf.cell(0, 10, "Strong Correlations Detected:", ln=True)
-            pdf.set_font("helvetica", "", 12)
+            pdf.set_font("helvetica", "", 11)
             for i_corr in strong_corrs:
-                pdf.multi_cell(0, 8, f"- {i_corr[0]} & {i_corr[1]}: {i_corr[2]}")
+                pdf.write(7, f"- {str(i_corr[0])} & {str(i_corr[1])}: {str(i_corr[2])}\n")
 
         # Export PDF using BytesIO
+        # Using dest='S' returns the document as a string/byte string
         pdf_output = pdf.output(dest='S')
-        # Handle both fpdf and fpdf2 output types
+        
+        # Ensure we have bytes for the download button
         if isinstance(pdf_output, str):
-            pdf_bytes = pdf_output.encode('latin1')
+            pdf_bytes = pdf_output.encode('latin-1', errors='replace')
         else:
             pdf_bytes = pdf_output
 
