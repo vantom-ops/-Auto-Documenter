@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import json
 from fpdf import FPDF
+import matplotlib.pyplot as plt
 
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
@@ -26,7 +27,8 @@ def analyze_file(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
 
-            with open("output/README.md", "w", encoding="utf-8") as f:
+            readme_path = "output/README.md"
+            with open(readme_path, "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
@@ -42,6 +44,32 @@ def analyze_file(file_path):
             "columns": len(df.columns),
             "column_names": list(df.columns)
         }
+
+        # ---------- GRAPH GENERATION ----------
+        graph_paths = []
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        for col in numeric_cols:
+            plt.figure(figsize=(8, 4))
+            series = df[col]
+            plt.plot(series, marker='o', label=col)
+
+            # Highlight min & max
+            min_idx = series.idxmin()
+            max_idx = series.idxmax()
+            plt.scatter(min_idx, series[min_idx], color='red', label='Min', zorder=5, s=80)
+            plt.scatter(max_idx, series[max_idx], color='green', label='Max', zorder=5, s=80)
+
+            plt.title(f"{col} with Min & Max")
+            plt.xlabel("Index")
+            plt.ylabel(col)
+            plt.legend()
+            plt.grid(True)
+            plt.tight_layout()
+
+            graph_file = f"output/{col}.png"
+            plt.savefig(graph_file)
+            plt.close()
+            graph_paths.append(graph_file)
 
         # ---------- README WITH SMART INSIGHTS ----------
         readme_path = "output/README.md"
@@ -67,6 +95,12 @@ def analyze_file(file_path):
                 f.write(f"Unique Values: {unique}\n")
                 f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
                 f.write("-" * 40 + "\n")
+
+            # Add graphs to README
+            if graph_paths:
+                f.write("\nGRAPHS\n\n")
+                for g in graph_paths:
+                    f.write(f"![{os.path.basename(g)}]({g})\n\n")
 
         # ---------- PDF GENERATION ----------
         pdf = FPDF()
@@ -106,9 +140,14 @@ def analyze_file(file_path):
             )
             pdf.ln(2)
 
+        # Add graphs to PDF
+        for g in graph_paths:
+            pdf.add_page()
+            pdf.image(g, x=10, y=20, w=180)
+
         pdf.output("output/report.pdf")
 
-        return summary
+        return {"summary": summary, "graphs": graph_paths}
 
     except Exception as e:
         return {"error": str(e)}
