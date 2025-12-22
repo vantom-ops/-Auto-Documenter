@@ -3,3 +3,5 @@ matplotlib
 fpdf
 openpyxl
 streamlit
+seaborn
+
