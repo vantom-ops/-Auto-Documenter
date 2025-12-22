@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import matplotlib.pyplot as plt
 from fpdf import FPDF
-from zipfile import ZipFile
 import streamlit as st
 
 # ---------- ANALYSIS FUNCTION ----------
@@ -195,15 +194,7 @@ def analyze_file(file_path, file_name):
         pdf_file_path = os.path.join("output", "report.pdf")
         pdf.output(pdf_file_path)
 
-        # ---------- STEP 4: CREATE ZIP ----------
-        zip_path = os.path.join("output", "Auto_Documenter_Output.zip")
-        with ZipFile(zip_path, 'w') as zipf:
-            zipf.write(readme_path, arcname="README.md")
-            zipf.write(pdf_file_path, arcname="report.pdf")
-            for g in graph_paths:
-                zipf.write(g, arcname=os.path.join("numeric_charts", os.path.basename(g)))
-
-        return {"summary": summary, "graphs": graph_paths, "warnings": warnings, "zip_file": zip_path}
+        return {"summary": summary, "graphs": graph_paths, "warnings": warnings}
 
     except Exception as e:
         return {"error": str(e)}
@@ -237,14 +228,3 @@ if uploaded_file:
     else:
         st.success("✅ File processed successfully!")
         st.json(result)
-
-        # ---------- ZIP DOWNLOAD ----------
-        zip_file = result.get("zip_file")
-        if zip_file and os.path.exists(zip_file):
-            with open(zip_file, "rb") as f:
-                st.download_button(
-                    label="Download All Outputs (ZIP)",
-                    data=f,
-                    file_name="Auto_Documenter_Output.zip",
-                    mime="application/zip"
-                )
