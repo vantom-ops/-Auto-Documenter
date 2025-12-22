@@ -209,20 +209,23 @@ def analyze_file(file_path, file_name):
     except Exception as e:
         return {"error": str(e)}
 
+
 # ---------- STREAMLIT APP ----------
 st.title("📄 Auto-Documenter")
 st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-# Only one uploader at top level
+# Single uploader with unique key to avoid duplicate ID error
 uploaded_file = st.file_uploader(
     "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"]
+    type=["csv", "xlsx", "xls", "json", "py"],
+    key="unique_file_uploader"
 )
 
 if uploaded_file:
     st.info("Processing file... ⏳")
 
     # Save uploaded file temporarily
+    os.makedirs("output", exist_ok=True)
     temp_path = os.path.join("output", uploaded_file.name)
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
