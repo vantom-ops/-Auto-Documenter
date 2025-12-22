@@ -4,4 +4,4 @@ fpdf
 openpyxl
 streamlit
 seaborn
-
+plotly
