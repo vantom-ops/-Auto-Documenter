@@ -142,11 +142,10 @@ def analyze_file(file_path):
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "file_type": ext, "dataframe": df}
+        return {"summary": summary, "graphs": graph_paths, "dataframe": df, "file_type": ext}
 
     except Exception as e:
         return {"error": str(e)}
-
 
 # ---------- STREAMLIT APP ----------
 st.title("📄 Auto-Documenter")
@@ -165,7 +164,7 @@ if uploaded_file:
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # Preview Step 5: Show first 10 rows, columns, and file type
+    # ---------- STEP 5: PREVIEW ----------
     try:
         if uploaded_file.name.endswith(".csv"):
             df_preview = pd.read_csv(temp_path, nrows=10)
@@ -189,7 +188,7 @@ if uploaded_file:
     except Exception as e:
         st.warning(f"Cannot preview file: {e}")
 
-    # Process full analysis
+    # ---------- RUN FULL ANALYSIS ----------
     result = analyze_file(temp_path)
 
     if "error" in result:
