@@ -35,7 +35,7 @@ def analyze_file(file_path):
             return {"error": "Unsupported file type"}
 
         # ---------- STEP 5: PREVIEW + HEALTH ----------
-        st.subheader("Step 5: File Preview & Health")
+        st.subheader("File Preview")
 
         # Preview
         st.write(f"Detected file type: {ext}")
@@ -198,3 +198,4 @@ def analyze_file(file_path):
 
     except Exception as e:
         return {"error": str(e)}
+
