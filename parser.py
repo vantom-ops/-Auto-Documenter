@@ -204,7 +204,7 @@ def analyze_file(file_path, file_name):
 st.title("📄 Auto-Documenter")
 st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 
-# ---------- SINGLE FILE UPLOADER WITH UNIQUE KEY ----------
+# ---------- SINGLE FILE UPLOADER ----------
 uploaded_file = st.file_uploader(
     "Choose a file",
     type=["csv", "xlsx", "xls", "json", "py"],
@@ -220,7 +220,7 @@ if uploaded_file:
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # Run analysis
+    # Run analysis (pass both file_path and file_name)
     result = analyze_file(temp_path, uploaded_file.name)
 
     if "error" in result:
