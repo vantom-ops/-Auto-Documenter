@@ -34,19 +34,45 @@ def analyze_file(file_path):
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- STEP 5: PREVIEW ----------
-        st.subheader("Step 5: File Preview")
+        # ---------- STEP 5: PREVIEW + HEALTH ----------
+        st.subheader("Step 5: File Preview & Health")
+
+        # Preview
         st.write(f"Detected file type: {ext}")
         st.write("First 10 rows:")
         st.dataframe(df.head(10))
         st.write("Columns:")
         st.write(list(df.columns))
 
+        # Dataset health metrics
+        total_cells = df.size
+        total_missing = df.isna().sum().sum()
+        completeness = round(((total_cells - total_missing) / total_cells) * 100, 2)
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        categorical_cols = df.select_dtypes(exclude=['number']).columns
+        numeric_ratio = round(len(numeric_cols) / len(df.columns) * 100, 2)
+        categorical_ratio = round(len(categorical_cols) / len(df.columns) * 100, 2)
+
+        # Warnings
+        high_unique_cols = [col for col in df.columns if df[col].nunique() > 50]
+
+        st.write(f"**Completeness:** {completeness}%")
+        st.write(f"**Numeric Columns:** {len(numeric_cols)} ({numeric_ratio}%)")
+        st.write(f"**Categorical Columns:** {len(categorical_cols)} ({categorical_ratio}%)")
+        if high_unique_cols:
+            st.warning(f"Columns with >50 unique values: {', '.join(high_unique_cols)}")
+
         # ---------- BASIC SUMMARY ----------
         summary = {
             "rows": len(df),
             "columns": len(df.columns),
-            "column_names": list(df.columns)
+            "column_names": list(df.columns),
+            "numeric_count": len(numeric_cols),
+            "categorical_count": len(categorical_cols),
+            "numeric_ratio": numeric_ratio,
+            "categorical_ratio": categorical_ratio,
+            "completeness": completeness,
+            "warnings": high_unique_cols
         }
 
         # ---------- INIT README ----------
@@ -74,9 +100,7 @@ def analyze_file(file_path):
         pdf.set_font("Arial", "", 11)
 
         # ---------- GRAPH GENERATION + TEXT ----------
-        numeric_cols = df.select_dtypes(include=['number']).columns
         graph_paths = []
-
         for col in df.columns:
             total = len(df[col])
             missing = df[col].isna().sum()
