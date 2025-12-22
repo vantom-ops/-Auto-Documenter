@@ -8,7 +8,6 @@ from parser import analyze_file
 import os
 import numpy as np
 from fpdf import FPDF
-import io
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -254,13 +253,12 @@ if uploaded_file:
             for a, b, v in strong_corrs:
                 pdf.multi_cell(0, 6, f"- {a} ↔ {b}: {v}")
 
-            pdf_output = io.BytesIO()
-            pdf.output(pdf_output)
-            pdf_output.seek(0)
+            # Correct way to generate PDF for Streamlit download
+            pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
             st.download_button(
                 label="⬇️ DOWNLOAD FULL PDF REPORT",
-                data=pdf_output,
+                data=pdf_bytes,
                 file_name="Auto_Documenter_Full_Report.pdf",
                 mime="application/pdf",
                 use_container_width=True
