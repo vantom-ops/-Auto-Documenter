@@ -5,7 +5,7 @@ import os
 from parser import analyze_file  # your phraiser.py or parser.py
 import io
 from fpdf import FPDF
-import plotly.express as px
+import matplotlib.pyplot as plt
 from textwrap import wrap
 
 # ---------- PAGE CONFIG ----------
@@ -93,10 +93,6 @@ if uploaded_file:
             corr = df[numeric_cols].corr().round(2)
             st.dataframe(corr, use_container_width=True)
 
-            # Correlation heatmap
-            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-            st.plotly_chart(fig, use_container_width=True)
-
         # Warnings: % missing values per column
         st.markdown("## ⚠ Missing Values % per Column")
         missing_pct = (df.isna().sum() / len(df) * 100).round(2)
@@ -132,23 +128,43 @@ if uploaded_file:
 
         # Dataset metrics
         pdf.set_font("Arial", "", 12)
-        metrics_text = f"Rows: {result['summary']['rows']}\nColumns: {result['summary']['columns']}\nNumeric: {result['numeric_count']}\nCategorical: {result['categorical_count']}\n"
+        metrics_text = f"Rows: {result['summary']['rows']}\nColumns: {result['summary']['columns']}\nNumeric: {result['numeric_count']}\nCategorical: {result['numeric_count']}"
         for line in wrap(metrics_text, width=90):
             pdf.multi_cell(0, 6, line)
         pdf.ln(2)
 
-        # Column stats
+        # Column stats with graphs
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 8, "Column Statistics (Min, Max, Avg)", ln=True)
+        pdf.cell(0, 8, "Column Statistics (Min, Max, Avg & Graph)", ln=True)
         pdf.set_font("Arial", "", 12)
-        for _, row in col_stats.iterrows():
-            line = f"{row['Column']}: Min={row['Min']}, Max={row['Max']}, Avg={row['Avg']}"
-            for wrapped_line in wrap(line, width=90):
+
+        for col in numeric_cols:
+            col_min = df[col].min()
+            col_max = df[col].max()
+            col_avg = round(df[col].mean(), 2)
+            stats_line = f"{col}: Min={col_min}, Max={col_max}, Avg={col_avg}"
+            for wrapped_line in wrap(stats_line, width=90):
                 pdf.multi_cell(0, 6, wrapped_line)
+
+            # Generate graph
+            plt.figure(figsize=(6, 3))
+            plt.plot(df[col], marker='o', linestyle='-', label=col)
+            plt.axhline(col_min, color='red', linestyle='--', label=f'Min={col_min}')
+            plt.axhline(col_max, color='green', linestyle='--', label=f'Max={col_max}')
+            plt.axhline(col_avg, color='blue', linestyle='-.', label=f'Avg={col_avg}')
+            plt.title(f"{col} Min/Max/Avg")
+            plt.tight_layout()
+            plt.legend()
+            graph_file = f"output/{col}_graph.png"
+            plt.savefig(graph_file)
+            plt.close()
+
+            # Add graph to PDF
+            pdf.image(graph_file, x=10, w=180)
+            pdf.ln(5)
 
         # Correlation table
         if len(numeric_cols) > 1:
-            pdf.ln(2)
             pdf.set_font("Arial", "B", 14)
             pdf.cell(0, 8, "Correlation Table", ln=True)
             pdf.set_font("Arial", "", 12)
@@ -172,13 +188,13 @@ if uploaded_file:
         pdf.cell(0, 8, f"ML Readiness Score: {ml_ready_score}/100", ln=True)
         pdf.set_font("Arial", "", 12)
         if numeric_cols and len(numeric_cols) > 1:
-            for wrapped_line in wrap("Suggested Regression Algorithms: Linear Regression, Random Forest Regressor, Gradient Boosting", width=90):
+            for wrapped_line in wrap("Suggested Regression: Linear Regression, Random Forest, Gradient Boosting", width=90):
                 pdf.multi_cell(0, 6, wrapped_line)
         if categorical_cols:
-            for wrapped_line in wrap("Suggested Classification Algorithms: Decision Tree, Random Forest, XGBoost, Logistic Regression", width=90):
+            for wrapped_line in wrap("Suggested Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression", width=90):
                 pdf.multi_cell(0, 6, wrapped_line)
         if numeric_cols and not categorical_cols:
-            for wrapped_line in wrap("Suggested Unsupervised/Clustering Algorithms: KMeans, DBSCAN, Hierarchical Clustering", width=90):
+            for wrapped_line in wrap("Suggested Clustering: KMeans, DBSCAN, Hierarchical Clustering", width=90):
                 pdf.multi_cell(0, 6, wrapped_line)
 
         # Save PDF
