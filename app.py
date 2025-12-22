@@ -101,33 +101,35 @@ if uploaded_file:
             else:
                 st.success("No major warnings detected ✅")
 
-            # ---------- COLUMN MIN/MAX (Attractive Gradient) ----------
+            # ---------- COLUMN MIN/MAX (Gradient Bars) ----------
             st.markdown("### 📌 Column Min/Max")
             for col in numeric_cols:
                 series = df_preview[col]
                 min_val = series.min()
                 max_val = series.max()
+                mean_val = series.mean()
                 
-                col1, col2, col3 = st.columns([1, 4, 1])
-                col1.markdown(f"**{col}**")
-                col2.markdown(
+                st.markdown(f"**{col}**")
+                st.markdown(
                     f"""
                     <div style="display:flex; align-items:center; gap:10px;">
                         <span style="color:blue;">Min: {min_val}</span>
-                        <div style="background:#eee; width:100%; height:15px; border-radius:5px; overflow:hidden;">
-                            <div style="background:linear-gradient(to right, blue, green); height:15px;"></div>
+                        <div style="background:#eee; width:100%; height:15px; border-radius:5px; overflow:hidden; position:relative;">
+                            <div style="background:linear-gradient(to right, blue, green); width:100%; height:15px;"></div>
+                            <div style="position:absolute; left:{(mean_val - min_val)/(max_val - min_val)*100}%; top:0; height:15px; border-left:2px solid yellow;"></div>
                         </div>
                         <span style="color:green;">Max: {max_val}</span>
                     </div>
                     """, unsafe_allow_html=True
                 )
-                col3.empty()
 
             # ---------- COLUMN GRAPHS ----------
             if show_graphs and result.get("graphs"):
                 with st.expander("📊 Column Graphs", expanded=True):
                     for col in numeric_cols:
                         fig = px.line(df_preview, y=col, title=f"{col} Interactive Graph", labels={"index": "Index"})
+                        fig.add_hline(y=df_preview[col].min(), line_dash="dash", line_color="red", annotation_text="Min")
+                        fig.add_hline(y=df_preview[col].max(), line_dash="dash", line_color="green", annotation_text="Max")
                         st.plotly_chart(fig, use_container_width=True)
 
             # ---------- CORRELATION HEATMAP ----------
