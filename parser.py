@@ -34,6 +34,14 @@ def analyze_file(file_path):
         else:
             return {"error": "Unsupported file type"}
 
+        # ---------- STEP 5: PREVIEW ----------
+        st.subheader("Step 5: File Preview")
+        st.write(f"Detected file type: {ext}")
+        st.write("First 10 rows:")
+        st.dataframe(df.head(10))
+        st.write("Columns:")
+        st.write(list(df.columns))
+
         # ---------- BASIC SUMMARY ----------
         summary = {
             "rows": len(df),
@@ -123,13 +131,13 @@ def analyze_file(file_path):
                 plt.close()
                 graph_paths.append(graph_file)
 
-                # Add min/max to README
+                # ---------- Add min/max to README ----------
                 with open(readme_path, "a", encoding="utf-8") as f:
                     f.write(f"Minimum Value: {min_value}\n")
                     f.write(f"Maximum Value: {max_value}\n")
                     f.write(f"![{col}]({graph_file})\n\n")
 
-                # Add min/max + graph to PDF
+                # ---------- Add min/max + graph to PDF ----------
                 pdf.set_font("Arial", "B", 12)
                 pdf.cell(0, 8, f"{col} Min & Max", ln=True)
                 pdf.set_font("Arial", "", 11)
@@ -142,61 +150,7 @@ def analyze_file(file_path):
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "dataframe": df, "file_type": ext}
+        return {"summary": summary, "graphs": graph_paths}
 
     except Exception as e:
         return {"error": str(e)}
-
-# ---------- STREAMLIT APP ----------
-st.title("📄 Auto-Documenter")
-st.write("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
-
-# ---------- SINGLE FILE UPLOADER ----------
-uploaded_file = st.file_uploader(
-    "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"],
-    key="unique_file_uploader"
-)
-
-if uploaded_file:
-    os.makedirs("output", exist_ok=True)
-    temp_path = os.path.join("output", uploaded_file.name)
-    with open(temp_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    # ---------- STEP 5: PREVIEW ----------
-    try:
-        if uploaded_file.name.endswith(".csv"):
-            df_preview = pd.read_csv(temp_path, nrows=10)
-        elif uploaded_file.name.endswith((".xlsx", ".xls")):
-            df_preview = pd.read_excel(temp_path, nrows=10)
-        elif uploaded_file.name.endswith(".json"):
-            with open(temp_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            df_preview = pd.json_normalize(data).head(10)
-        else:
-            df_preview = None
-
-        if df_preview is not None:
-            st.subheader("Preview of Uploaded File (Step 5)")
-            st.write(f"Detected file type: {uploaded_file.type}")
-            st.write("First 10 rows:")
-            st.dataframe(df_preview)
-            st.write("Columns:")
-            st.write(list(df_preview.columns))
-
-    except Exception as e:
-        st.warning(f"Cannot preview file: {e}")
-
-    # ---------- RUN FULL ANALYSIS ----------
-    result = analyze_file(temp_path)
-
-    if "error" in result:
-        st.error(result["error"])
-    else:
-        st.success("✅ File processed successfully!")
-        st.json({
-            "summary": result["summary"],
-            "graphs": result["graphs"],
-            "file_type": result["file_type"]
-        })
