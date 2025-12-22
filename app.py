@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from parser import analyze_file
 import os
-import numpy as np
 from fpdf import FPDF
 import io
 import textwrap
@@ -18,26 +16,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
 st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 st.markdown("---")
 
-# ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
-    show_graphs = st.checkbox("Show Column Graphs", True)
     show_corr = st.checkbox("Show Correlation Analysis", True)
 
-# ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader(
     "Choose a file",
     type=["csv", "xlsx", "xls", "json", "py"]
 )
 
 def safe_multicell(pdf, text, width=0, line_height=6):
-    """Write text safely to PDF by splitting extremely long words."""
     safe_text = ""
     for word in text.split(" "):
         if len(word) > 50:
@@ -46,45 +39,35 @@ def safe_multicell(pdf, text, width=0, line_height=6):
     pdf.multi_cell(width, line_height, safe_text.strip())
 
 if uploaded_file:
-
     # ---------- LOAD FILE ----------
     if uploaded_file.name.endswith(".csv"):
-        df_preview = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
-        df_preview = pd.read_excel(uploaded_file)
+        df = pd.read_excel(uploaded_file)
     elif uploaded_file.name.endswith(".json"):
-        df_preview = pd.read_json(uploaded_file)
+        df = pd.read_json(uploaded_file)
     else:
-        df_preview = pd.DataFrame()
+        df = pd.DataFrame()
 
-    # ---------- FILE PREVIEW ----------
-    if not df_preview.empty:
+    if not df.empty:
         st.markdown("## 🔍 File Preview")
-        st.dataframe(df_preview.head(preview_rows), use_container_width=True)
+        st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- GENERATE ----------
-    if st.button("🚀 Generate Documentation"):
-        with st.spinner("Processing file..."):
-            os.makedirs("temp_upload", exist_ok=True)
-            temp_path = os.path.join("temp_upload", uploaded_file.name)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            result = analyze_file(temp_path)
-
-        if "error" in result:
-            st.error(result["error"])
-            st.stop()
-
-        st.success("✅ Documentation generated successfully!")
+        # ---------- COLUMN DATATYPES ----------
+        st.markdown("## 🗂 Column Data Types")
+        col_types = pd.DataFrame({
+            "Column": df.columns,
+            "Data Type": df.dtypes.astype(str)
+        })
+        st.dataframe(col_types, use_container_width=True)
 
         # ---------- BASIC METRICS ----------
-        rows, cols = df_preview.shape
-        numeric_cols = df_preview.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df_preview.select_dtypes(exclude=np.number).columns.tolist()
-        completeness = round((df_preview.notna().sum().sum() / (rows * cols)) * 100, 2)
-        duplicate_pct = round((df_preview.duplicated().sum() / rows) * 100, 2)
+        rows, cols = df.shape
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+        completeness = round(df.notna().sum().sum() / (rows*cols) * 100, 2)
+        duplicate_pct = round(df.duplicated().sum()/rows*100,2)
 
-        # ---------- METRIC CARDS ----------
         st.markdown("## 📊 Dataset Metrics")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", rows)
@@ -92,148 +75,88 @@ if uploaded_file:
         c3.metric("Numeric", len(numeric_cols))
         c4.metric("Categorical", len(categorical_cols))
 
-        # ---------- DATA HEALTH SCORE ----------
-        health_score = round(
-            (completeness * 0.5) +
-            ((100 - duplicate_pct) * 0.2) +
-            (min(len(numeric_cols)/cols,1)*100*0.15) +
-            (min(len(categorical_cols)/cols,1)*100*0.15),
-            2
-        )
-        st.markdown("## 🏥 Overall Data Health Score")
-        st.progress(health_score/100)
-        st.metric("Health Score", f"{health_score} / 100")
-
-        # ---------- WARNINGS ----------
-        st.markdown("## ⚠ Data Health Warnings")
-        high_missing_cols = []
-        for col in df_preview.columns:
-            miss = df_preview[col].isna().mean() * 100
-            if miss > 50:
-                high_missing_cols.append(col)
-                st.warning(f"{col} has {round(miss,2)}% missing values")
-        if not high_missing_cols:
-            st.success("🎉 No major data quality issues detected")
-
         # ---------- COLUMN STATISTICS ----------
-        with st.expander("📌 Column Statistics (Min, Max, Avg)", expanded=False):
-            grid = st.columns(3)
-            for i, col in enumerate(numeric_cols):
-                col_min = df_preview[col].min()
-                col_max = df_preview[col].max()
-                col_avg = round(df_preview[col].mean(),2)
-                with grid[i%3]:
-                    st.markdown(
-                        f"""
-                        <div style="padding:15px;border-radius:14px;
-                        background:linear-gradient(135deg,#1d2671,#c33764);
-                        color:white;">
-                        <h4>{col}</h4>
-                        <p>⬇ Min: {col_min}</p>
-                        <p>⬆ Max: {col_max}</p>
-                        <p>📊 Avg: {col_avg}</p>
-                        </div>
-                        """, unsafe_allow_html=True
-                    )
-
-        # ---------- COLUMN GRAPHS ----------
-        if show_graphs and numeric_cols:
-            with st.expander("📈 Column Graphs", expanded=False):
-                for col in numeric_cols:
-                    fig = px.line(df_preview, y=col, title=f"{col} Trend")
-                    st.plotly_chart(fig, use_container_width=True)
+        col_stats = []
+        for col in numeric_cols:
+            col_stats.append({
+                "Column": col,
+                "Min": df[col].min(),
+                "Max": df[col].max(),
+                "Avg": round(df[col].mean(),2)
+            })
+        st.markdown("## 📌 Column Statistics (Min, Max, Avg)")
+        st.dataframe(pd.DataFrame(col_stats), use_container_width=True)
 
         # ---------- CORRELATION ----------
-        strong_corrs = []
-        if show_corr and len(numeric_cols) > 1:
-            with st.expander("🔥 Correlation Analysis", expanded=False):
-                corr = df_preview[numeric_cols].corr().round(3)
-                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-                st.plotly_chart(fig, use_container_width=True)
-            with st.expander("📋 Correlation Table", expanded=False):
-                st.dataframe(corr, use_container_width=True)
-            for i in corr.columns:
-                for j in corr.columns:
-                    if i != j and abs(corr.loc[i,j])>0.7:
-                        strong_corrs.append((i,j,corr.loc[i,j]))
+        if show_corr and len(numeric_cols)>1:
+            st.markdown("## 🔥 Correlation Analysis")
+            corr = df[numeric_cols].corr().round(3)
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ---------- AUTO INSIGHTS ----------
-        st.markdown("## 🤖 Auto Insights")
-        insights=[]
-        recommendations=[]
-        if completeness<80:
-            insights.append("Dataset has low completeness.")
-            recommendations.append("Consider imputing or removing missing values.")
-        if strong_corrs:
-            insights.append("Strong correlations detected.")
-            recommendations.append("Check multicollinearity before modeling.")
-        if duplicate_pct>5:
-            recommendations.append("Remove duplicate rows to improve data quality.")
-        for i in insights:
-            st.info(i)
-        st.markdown("### 🛠 Auto Recommendations")
-        for r in recommendations:
-            st.success(r)
+            st.markdown("### 📋 Correlation Table")
+            st.dataframe(corr, use_container_width=True)
 
         # ---------- ML READINESS SCORE ----------
-        st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
         ml_ready_score = round(
             (completeness*0.4)+((100-duplicate_pct)*0.3)+
             (min(len(numeric_cols)/cols,1)*100*0.15)+
-            (min(len(categorical_cols)/cols,1)*100*0.15),
-            2
+            (min(len(categorical_cols)/cols,1)*100*0.15),2
         )
+        st.markdown("## 🤖 ML Readiness Score + Algorithm Suggestions")
         st.metric("ML Readiness Score", f"{ml_ready_score}/100")
-
         if numeric_cols and len(numeric_cols)>1:
-            st.subheader("Suggested Algorithms (Numeric/Regression)")
             st.write("- Linear Regression, Random Forest Regressor, Gradient Boosting")
         if categorical_cols:
-            st.subheader("Suggested Algorithms (Categorical/Classification)")
             st.write("- Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
         if numeric_cols and not categorical_cols:
-            st.subheader("Suggested Algorithms (Unsupervised/Clustering)")
             st.write("- KMeans, DBSCAN, Hierarchical Clustering")
 
         # ---------- PDF REPORT ----------
-        st.markdown("## 📝 Full PDF Report")
-
+        st.markdown("## 📝 Download PDF Report")
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font("Arial", "", 12)
+        pdf.set_font("Arial","",12)
 
-        pdf.cell(0,10,"Auto-Documenter Report",ln=True,align="C")
+        safe_multicell(pdf,"Auto-Documenter Report")
         pdf.ln(5)
         safe_multicell(pdf,f"Rows: {rows}\nColumns: {cols}\nNumeric: {len(numeric_cols)}\nCategorical: {len(categorical_cols)}")
         pdf.ln(2)
-        safe_multicell(pdf,f"Data Health Score: {health_score}/100")
-        pdf.ln(2)
-        safe_multicell(pdf,"Column Statistics (Min/Max/Avg):")
-        for col in numeric_cols:
-            safe_multicell(pdf,f"- {col}: Min={df_preview[col].min()}, Max={df_preview[col].max()}, Avg={round(df_preview[col].mean(),2)}")
-        pdf.ln(2)
-        safe_multicell(pdf,"Strong Correlations:")
-        for a,b,v in strong_corrs:
-            safe_multicell(pdf,f"- {a} ↔ {b}: {v}")
-        pdf.ln(2)
-        safe_multicell(pdf,"Insights:")
-        for i in insights:
-            safe_multicell(pdf,f"- {i}")
-        pdf.ln(2)
-        safe_multicell(pdf,"Recommendations:")
-        for r in recommendations:
-            safe_multicell(pdf,f"- {r}")
 
-        # Export PDF using BytesIO
+        safe_multicell(pdf,"Column Data Types:")
+        for i,row in col_types.iterrows():
+            safe_multicell(pdf,f"- {row['Column']}: {row['Data Type']}")
+
+        pdf.ln(2)
+        safe_multicell(pdf,"Column Statistics (Min, Max, Avg):")
+        for stat in col_stats:
+            safe_multicell(pdf,f"- {stat['Column']}: Min={stat['Min']}, Max={stat['Max']}, Avg={stat['Avg']}")
+
+        if show_corr and len(numeric_cols)>1:
+            pdf.ln(2)
+            safe_multicell(pdf,"Correlation Table:")
+            for i in corr.index:
+                row_str = ", ".join([f"{j}:{corr.loc[i,j]}" for j in corr.columns])
+                safe_multicell(pdf,f"{i}: {row_str}")
+
+        pdf.ln(2)
+        safe_multicell(pdf,f"ML Readiness Score: {ml_ready_score}/100")
+        if numeric_cols and len(numeric_cols)>1:
+            safe_multicell(pdf,"Suggested Algorithms (Numeric/Regression): Linear Regression, Random Forest Regressor, Gradient Boosting")
+        if categorical_cols:
+            safe_multicell(pdf,"Suggested Algorithms (Categorical/Classification): Decision Tree, Random Forest Classifier, XGBoost, Logistic Regression")
+        if numeric_cols and not categorical_cols:
+            safe_multicell(pdf,"Suggested Algorithms (Unsupervised/Clustering): KMeans, DBSCAN, Hierarchical Clustering")
+
+        # Export PDF
         pdf_bytes = io.BytesIO()
         pdf.output(pdf_bytes)
         pdf_bytes.seek(0)
 
-        # ---------- BIG DOWNLOAD BUTTON ----------
         st.download_button(
-            label="⬇️⬇️⬇️ Download Full PDF Report ⬇️⬇️⬇️",
+            label="⬇️⬇️ Download PDF Report ⬇️⬇️",
             data=pdf_bytes,
-            file_name="Auto_Documenter_Full_Report.pdf",
+            file_name="Auto_Documenter_Report.pdf",
             mime="application/pdf",
             use_container_width=True
         )
