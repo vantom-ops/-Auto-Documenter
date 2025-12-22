@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
+import plotly.express as px
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
@@ -20,7 +20,6 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    # Load dataframe
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
@@ -31,7 +30,6 @@ if uploaded_file:
         st.error("Unsupported file type!")
         st.stop()
 
-    # ---------- FILE PREVIEW ----------
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
@@ -49,45 +47,70 @@ if uploaded_file:
     # ---------- COLUMN DATATYPES ----------
     st.markdown("## 📌 Column Datatypes")
     col_types_df = pd.DataFrame({'Column': df.columns, 'Type': df.dtypes.astype(str)})
-    st.dataframe(col_types_df.T, use_container_width=True)  # Transpose for side-by-side view
+    st.dataframe(col_types_df.T, use_container_width=True)
 
     # ---------- MISSING VALUES ----------
     st.markdown("## ⚠ Missing Values % per Column")
     missing_pct = (df.isna().sum() / len(df) * 100).round(2)
     st.dataframe(missing_pct, use_container_width=True)
 
-    # ---------- COLUMN GRAPHS ----------
-    with st.expander("📈 Column Graphs"):
+    # ---------- COLUMN MIN/MAX/AVG INTERACTIVE ----------
+    st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
+    if numeric_cols:
+        col_stats = pd.DataFrame({
+            'Column': numeric_cols,
+            'Min': [df[col].min() for col in numeric_cols],
+            'Avg': [df[col].mean() for col in numeric_cols],
+            'Max': [df[col].max() for col in numeric_cols]
+        })
+
+        # Plot interactive horizontal bars
+        fig = go.Figure()
+        for idx, row in col_stats.iterrows():
+            fig.add_trace(go.Bar(
+                y=[row['Column']],
+                x=[row['Min']],
+                name='Min',
+                orientation='h',
+                marker=dict(color='red'),
+                hovertemplate=f"Min: {row['Min']}"
+            ))
+            fig.add_trace(go.Bar(
+                y=[row['Column']],
+                x=[row['Avg']],
+                name='Avg',
+                orientation='h',
+                marker=dict(color='yellow'),
+                hovertemplate=f"Avg: {row['Avg']}"
+            ))
+            fig.add_trace(go.Bar(
+                y=[row['Column']],
+                x=[row['Max']],
+                name='Max',
+                orientation='h',
+                marker=dict(color='green'),
+                hovertemplate=f"Max: {row['Max']}"
+            ))
+
+        fig.update_layout(
+            barmode='group',
+            height=50*len(numeric_cols),
+            xaxis_title="Value",
+            yaxis_title="Column",
+            showlegend=True,
+            title="Min / Avg / Max for Numeric Columns",
+            margin=dict(l=120, r=20, t=50, b=50)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ---------- COLUMN LINE GRAPHS ----------
+    with st.expander("📈 Column Line Graphs"):
         for col in numeric_cols:
-            col_min = df[col].min()
-            col_max = df[col].max()
-            col_avg = round(df[col].mean(), 2)
-
-            with st.expander(f"{col} (Min/Avg/Max & Trend Graph)"):
-                st.markdown(f"**Min:** {col_min} | **Avg:** {col_avg} | **Max:** {col_max}")
-
-                # Gradient horizontal bar for Min → Avg → Max
-                bar_fig = go.Figure(go.Bar(
-                    x=[col_avg],
-                    y=[col],
-                    orientation='h',
-                    marker=dict(
-                        color=[col_avg],
-                        colorscale=[[0, 'red'], [0.5, 'yellow'], [1, 'green']],
-                        cmin=col_min,
-                        cmax=col_max,
-                        colorbar=dict(title="Value")
-                    )
-                ))
-                bar_fig.update_layout(xaxis_title="Value", yaxis_title="", height=100, margin=dict(l=20, r=20, t=20, b=20))
-                st.plotly_chart(bar_fig, use_container_width=True)
-
-                # Full line graph
-                line_fig = px.line(df, y=col, title=f"{col} Trend", markers=True)
-                line_fig.add_hline(y=col_min, line_dash="dash", line_color="red", annotation_text="Min")
-                line_fig.add_hline(y=col_max, line_dash="dash", line_color="green", annotation_text="Max")
-                line_fig.add_hline(y=col_avg, line_dash="dot", line_color="yellow", annotation_text="Avg")
-                st.plotly_chart(line_fig, use_container_width=True)
+            fig_line = px.line(df, y=col, title=f"{col} Trend", markers=True)
+            fig_line.add_hline(y=df[col].min(), line_dash="dash", line_color="red", annotation_text="Min")
+            fig_line.add_hline(y=df[col].mean(), line_dash="dot", line_color="yellow", annotation_text="Avg")
+            fig_line.add_hline(y=df[col].max(), line_dash="dash", line_color="green", annotation_text="Max")
+            st.plotly_chart(fig_line, use_container_width=True)
 
     # ---------- CORRELATION HEATMAP ----------
     if len(numeric_cols) > 1:
@@ -116,7 +139,7 @@ if uploaded_file:
         2
     )
 
-    # Gradient bar for ML score
+    # Interactive gradient bar for ML score
     score_fig = go.Figure(go.Bar(
         x=[ml_ready_score],
         y=["ML Readiness"],
@@ -125,14 +148,18 @@ if uploaded_file:
             color=[ml_ready_score],
             colorscale=[[0, 'red'], [0.5, 'yellow'], [1, 'green']],
             cmin=0,
-            cmax=100,
-            colorbar=dict(title="Score")
-        )
+            cmax=100
+        ),
+        hovertemplate=f"Score: {ml_ready_score}/100"
     ))
-    score_fig.update_layout(xaxis_title="Score /100", yaxis_title="", height=100, margin=dict(l=20, r=20, t=20, b=20))
+    score_fig.update_layout(
+        xaxis_title="Score /100",
+        yaxis_title="",
+        height=150,
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
     st.plotly_chart(score_fig, use_container_width=True)
 
-    # Suggested algorithms
     st.markdown("**Suggested Algorithms:**")
     if numeric_cols and len(numeric_cols) > 1:
         st.write("- Regression: Linear Regression, Random Forest Regressor, Gradient Boosting")
