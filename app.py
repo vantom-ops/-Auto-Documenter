@@ -1,92 +1,101 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import plotly.express as px
+import seaborn as sns
+import numpy as np
+from fpdf import FPDF
+import io
 
-st.set_page_config(page_title="Auto-Documenter", layout="wide")
+st.set_page_config(page_title="Auto Data Analyzer", layout="wide")
 
-st.title("📄 Auto-Documenter")
-st.caption("Stable build with correlation analysis")
+st.title("📊 Auto Data Analyzer")
 
-uploaded_file = st.file_uploader(
-    "Upload CSV or Excel",
-    type=["csv", "xlsx", "xls"]
-)
-
+# ----------------- Upload Data -----------------
+uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 if uploaded_file:
-    try:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
+    df = pd.read_csv(uploaded_file)
+    st.success("✅ File loaded successfully!")
+    st.write("Preview of your data:", df.head())
 
-        st.success("File loaded successfully")
+    # ----------------- 1️⃣ Data Health Score -----------------
+    st.header("1️⃣ Data Health Score")
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+    
+    missing_pct = df.isnull().mean() * 100
+    unique_pct = df.nunique() / len(df) * 100
+    completeness_score = 100 - missing_pct.mean()
+    uniqueness_score = unique_pct.mean()
+    health_score = (completeness_score + uniqueness_score) / 2
 
-        # ---------- PREVIEW ----------
-        st.subheader("🔍 File Preview (First 10 Rows)")
-        st.dataframe(df.head(10), use_container_width=True)
+    st.subheader("Radar Chart")
+    labels = ['Completeness', 'Uniqueness']
+    stats = [completeness_score, uniqueness_score]
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
+    stats += stats[:1]
+    angles += angles[:1]
 
-        # ---------- METRICS ----------
-        rows, cols = df.shape
-        completeness = round(df.notna().mean().mean() * 100, 2)
+    fig, ax = plt.subplots(figsize=(5,5), subplot_kw=dict(polar=True))
+    ax.plot(angles, stats, 'o-', linewidth=2)
+    ax.fill(angles, stats, alpha=0.25)
+    ax.set_thetagrids(np.degrees(angles[:-1]), labels)
+    ax.set_title(f"Data Health Score: {health_score:.2f}%")
+    st.pyplot(fig)
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Rows", rows)
-        c2.metric("Columns", cols)
-        c3.metric("Completeness %", completeness)
+    # ----------------- 2️⃣ Auto AI-style Insights -----------------
+    st.header("2️⃣ Auto AI-style Insights (Executive Summary)")
+    summary = f"Your dataset has {df.shape[0]} rows and {df.shape[1]} columns.\n\n"
+    summary += f"- Numeric columns: {numeric_cols}\n"
+    summary += f"- Categorical columns: {categorical_cols}\n"
+    summary += f"- Average missing values per column: {missing_pct.mean():.2f}%\n"
+    summary += f"- Average uniqueness percentage: {uniqueness_score:.2f}%\n"
+    
+    # Example of correlation insight
+    if numeric_cols:
+        corr_matrix = df[numeric_cols].corr()
+        high_corr = corr_matrix.abs().unstack().sort_values(ascending=False)
+        high_corr = high_corr[high_corr < 1].drop_duplicates()
+        top_corr = high_corr.head(3)
+        summary += f"- Top correlations:\n{top_corr}\n"
 
-        # ---------- NUMERIC COLUMNS ----------
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    st.text_area("Executive Summary", summary, height=200)
 
-        # ---------- COLUMN STATS ----------
-        if numeric_cols:
-            st.subheader("📊 Column Statistics")
-            stats = pd.DataFrame({
-                "Min": df[numeric_cols].min(),
-                "Max": df[numeric_cols].max(),
-                "Average": df[numeric_cols].mean().round(2)
-            })
-            st.dataframe(stats, use_container_width=True)
+    # ----------------- 3️⃣ ML Readiness + Algorithm Suggestion -----------------
+    st.header("3️⃣ ML Readiness Score + Algorithm Suggestions")
+    ml_ready_score = health_score
+    st.write(f"ML Readiness Score: {ml_ready_score:.2f}%")
+    
+    # Suggest algorithms based on column types
+    if numeric_cols and len(numeric_cols) > 1:
+        st.subheader("Suggested ML Algorithms (Regression / Clustering)")
+        st.write("- Linear Regression, Random Forest Regressor (numeric target)")
+        st.write("- KMeans, DBSCAN (unsupervised clustering)")
+    if categorical_cols:
+        st.subheader("Suggested ML Algorithms (Classification)")
+        st.write("- Decision Tree, Random Forest Classifier, XGBoost")
 
-        # ---------- CORRELATION ----------
-        if len(numeric_cols) > 1:
-            st.subheader("🔥 Correlation Analysis")
+    # ----------------- 4️⃣ PDF Export -----------------
+    st.header("4️⃣ Export Report as PDF")
+    if st.button("Generate PDF"):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, "Auto Data Analyzer Report", ln=True, align="C")
+        pdf.set_font("Arial", '', 12)
+        pdf.ln(10)
+        
+        # Add Data Health Score
+        pdf.cell(0, 10, f"Data Health Score: {health_score:.2f}%", ln=True)
+        pdf.cell(0, 10, f"Completeness: {completeness_score:.2f}%", ln=True)
+        pdf.cell(0, 10, f"Uniqueness: {uniqueness_score:.2f}%", ln=True)
+        pdf.ln(5)
 
-            corr = df[numeric_cols].corr().round(3)
-
-            # Heatmap
-            fig = px.imshow(
-                corr,
-                text_auto=True,
-                color_continuous_scale="RdBu_r",
-                title="Correlation Heatmap"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Table
-            st.subheader("📋 Correlation Table")
-            st.dataframe(corr, use_container_width=True)
-
-            # Strong correlations
-            st.subheader("⚠ Strong Correlations (> 0.7)")
-            found = False
-            for i in corr.columns:
-                for j in corr.columns:
-                    if i != j and abs(corr.loc[i, j]) > 0.7:
-                        st.warning(f"{i} ↔ {j} = {corr.loc[i, j]}")
-                        found = True
-            if not found:
-                st.success("No strong correlations detected")
-
-        # ---------- SIMPLE GRAPH ----------
-        if numeric_cols:
-            st.subheader("📈 Sample Trend")
-            fig2, ax = plt.subplots()
-            ax.plot(df[numeric_cols[0]])
-            ax.set_title(numeric_cols[0])
-            st.pyplot(fig2)
-
-    except Exception as e:
-        st.error("❌ App crashed")
-        st.exception(e)
+        # Add Summary
+        pdf.multi_cell(0, 6, summary)
+        pdf.ln(5)
+        pdf.multi_cell(0, 6, "ML Readiness Score: {:.2f}%".format(ml_ready_score))
+        
+        pdf_output = io.BytesIO()
+        pdf.output(pdf_output)
+        pdf_output.seek(0)
+        st.download_button("📥 Download PDF", data=pdf_output, file_name="data_report.pdf", mime="application/pdf")
