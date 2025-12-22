@@ -3,6 +3,8 @@ import pandas as pd
 import json
 from fpdf import FPDF
 import matplotlib.pyplot as plt
+import shutil
+from zipfile import ZipFile
 
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
@@ -98,9 +100,13 @@ def analyze_file(file_path):
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
 
-        # ---------- COLUMN INSIGHTS + GRAPHS ----------
+        # ---------- CREATE GRAPH FOLDER ----------
+        graph_folder = "output/numeric_charts"
+        os.makedirs(graph_folder, exist_ok=True)
+
         graph_paths = []
 
+        # ---------- COLUMN INSIGHTS + GRAPHS ----------
         for col in df.columns:
             total = len(df[col])
             missing = df[col].isna().sum()
@@ -149,7 +155,7 @@ def analyze_file(file_path):
                 plt.grid(True)
                 plt.tight_layout()
 
-                graph_file = f"output/{col}.png"
+                graph_file = os.path.join(graph_folder, f"{col}.png")
                 plt.savefig(graph_file)
                 plt.close()
                 graph_paths.append(graph_file)
@@ -197,7 +203,18 @@ def analyze_file(file_path):
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "warnings": warnings}
+        # ---------- STEP 4: CREATE ZIP ----------
+        zip_path = "output/Auto_Documenter_Output.zip"
+        with ZipFile(zip_path, 'w') as zipf:
+            # Add README
+            zipf.write(readme_path, arcname="README.md")
+            # Add PDF
+            zipf.write("output/report.pdf", arcname="report.pdf")
+            # Add numeric graphs
+            for g in graph_paths:
+                zipf.write(g, arcname=os.path.join("numeric_charts", os.path.basename(g)))
+
+        return {"summary": summary, "graphs": graph_paths, "warnings": warnings, "zip_file": zip_path}
 
     except Exception as e:
         return {"error": str(e)}
