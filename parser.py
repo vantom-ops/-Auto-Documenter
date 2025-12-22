@@ -3,7 +3,7 @@ import pandas as pd
 import json
 from fpdf import FPDF
 import matplotlib.pyplot as plt
-import seaborn as sns
+
 def analyze_file(file_path):
     os.makedirs("output", exist_ok=True)
 
@@ -14,21 +14,27 @@ def analyze_file(file_path):
         # ---------- READ FILE ----------
         if ext == ".csv":
             df = pd.read_csv(file_path, low_memory=False)
+
         elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
+
         elif ext == ".json":
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             df = pd.json_normalize(data)
+
         elif ext == ".py":
             with open(file_path, "r", encoding="utf-8") as f:
                 code = f.read()
+
             readme_path = "output/README.md"
             with open(readme_path, "w", encoding="utf-8") as f:
                 f.write("AUTO GENERATED DOCUMENTATION\n\n")
                 f.write("PYTHON FILE\n\n")
                 f.write(code)
+
             return {"file": file_name, "type": "python"}
+
         else:
             return {"error": "Unsupported file type"}
 
@@ -36,15 +42,11 @@ def analyze_file(file_path):
         summary = {
             "rows": len(df),
             "columns": len(df.columns),
-            "column_names": list(df.columns)
+            "column_names": list(df.columns),
+            "numeric_count": len(df.select_dtypes(include=['number']).columns),
+            "categorical_count": len(df.select_dtypes(exclude=['number']).columns),
+            "completeness": round((1 - df.isna().sum().sum() / (df.shape[0] * df.shape[1])) * 100, 2)
         }
-
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        categorical_cols = df.select_dtypes(exclude=['number']).columns
-
-        completeness = round(df.notna().sum().sum() / (df.shape[0]*df.shape[1]) * 100, 2)
-        numeric_ratio = round(len(numeric_cols)/len(df.columns)*100,2) if len(df.columns)>0 else 0
-        categorical_ratio = round(len(categorical_cols)/len(df.columns)*100,2) if len(df.columns)>0 else 0
 
         # ---------- INIT README ----------
         readme_path = "output/README.md"
@@ -65,55 +67,54 @@ def analyze_file(file_path):
         pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
         pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
         pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
-        pdf.cell(0, 8, f"Completeness: {completeness}%", ln=True)
-        pdf.cell(0, 8, f"Numeric vs Categorical: {numeric_ratio}% vs {categorical_ratio}%", ln=True)
         pdf.ln(6)
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
 
-        # ---------- GRAPH + COLUMN DETAILS ----------
+        # ---------- GRAPH GENERATION + TEXT ----------
+        numeric_cols = df.select_dtypes(include=['number']).columns
         graph_paths = []
+
         for col in df.columns:
             total = len(df[col])
             missing = df[col].isna().sum()
-            missing_pct = round((missing/total)*100,2)
+            missing_pct = round((missing / total) * 100, 2)
             unique = df[col].nunique(dropna=True)
             samples = df[col].dropna().unique()[:5]
 
-            # README
-            with open(readme_path,"a",encoding="utf-8") as f:
+            # Write column insights to README
+            with open(readme_path, "a", encoding="utf-8") as f:
                 f.write(f"Column Name: {col}\n")
                 f.write(f"Data Type: {df[col].dtype}\n")
                 f.write(f"Total Values: {total}\n")
                 f.write(f"Missing Values: {missing}\n")
                 f.write(f"Missing Percentage: {missing_pct}%\n")
                 f.write(f"Unique Values: {unique}\n")
-                f.write(f"Sample Values: {', '.join(map(str,samples))}\n")
+                f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
 
-            # PDF
-            pdf.multi_cell(0,7,
+            # Write column insights to PDF
+            pdf.multi_cell(
+                0, 7,
                 f"Column Name: {col}\n"
                 f"Data Type: {df[col].dtype}\n"
                 f"Total Values: {total}\n"
                 f"Missing Values: {missing}\n"
                 f"Missing Percentage: {missing_pct}%\n"
                 f"Unique Values: {unique}\n"
-                f"Sample Values: {', '.join(map(str,samples))}\n"
-                + "-"*40)
+                f"Sample Values: {', '.join(map(str, samples))}\n"
+                + "-" * 40
+            )
             pdf.ln(2)
 
-            # Numeric columns: graph + min/max
+            # If numeric column, add graph + min/max
             if col in numeric_cols:
                 series = df[col]
                 min_value = series.min()
                 max_value = series.max()
-                mean_value = series.mean()
-                median_value = series.median()
-                std_value = series.std()
 
-                # Graph
-                plt.figure(figsize=(8,4))
+                # ---------- Graph ----------
+                plt.figure(figsize=(8, 4))
                 plt.plot(series, marker='o', label=col)
                 plt.axhline(min_value, color='red', linestyle='--', label=f'Min: {min_value}')
                 plt.axhline(max_value, color='green', linestyle='--', label=f'Max: {max_value}')
@@ -123,53 +124,37 @@ def analyze_file(file_path):
                 plt.legend()
                 plt.grid(True)
                 plt.tight_layout()
+
                 graph_file = f"output/{col}.png"
                 plt.savefig(graph_file)
                 plt.close()
                 graph_paths.append(graph_file)
 
-                # README
-                with open(readme_path,"a",encoding="utf-8") as f:
-                    f.write(f"Minimum Value: {min_value}\nMaximum Value: {max_value}\n")
+                # Add min/max to README
+                with open(readme_path, "a", encoding="utf-8") as f:
+                    f.write(f"Minimum Value: {min_value}\n")
+                    f.write(f"Maximum Value: {max_value}\n")
                     f.write(f"![{col}]({graph_file})\n\n")
 
-                # PDF
-                pdf.set_font("Arial","B",12)
-                pdf.cell(0,8,f"{col} Stats",ln=True)
-                pdf.set_font("Arial","",11)
-                pdf.cell(0,7,f"Min: {min_value}, Max: {max_value}, Mean: {mean_value:.2f}, Median: {median_value}, Std: {std_value:.2f}",ln=True)
+                # Add min/max + graph to PDF
+                pdf.set_font("Arial", "B", 12)
+                pdf.cell(0, 8, f"{col} Min & Max", ln=True)
+                pdf.set_font("Arial", "", 11)
+                pdf.cell(0, 7, f"Minimum Value: {min_value}", ln=True)
+                pdf.cell(0, 7, f"Maximum Value: {max_value}", ln=True)
                 pdf.ln(2)
-                pdf.image(graph_file,x=10,w=180)
+                pdf.image(graph_file, x=10, y=None, w=180)
                 pdf.ln(5)
-
-        # ---------- CORRELATION HEATMAP ----------
-        if len(numeric_cols)>1:
-            corr = df[numeric_cols].corr()
-            plt.figure(figsize=(8,6))
-            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm")
-            plt.title("Correlation Heatmap")
-            corr_file = "output/correlation_heatmap.png"
-            plt.savefig(corr_file)
-            plt.close()
-            pdf.set_font("Arial","B",12)
-            pdf.cell(0,8,"Correlation Heatmap",ln=True)
-            pdf.image(corr_file,x=10,w=180)
-            pdf.ln(5)
-
-        # ---------- FILE PREVIEW (Step 5) ----------
-        pdf.set_font("Arial","B",12)
-        pdf.cell(0,8,"File Preview (first 5 rows)",ln=True)
-        pdf.set_font("Arial","",10)
-        preview_rows = df.head(5)
-        for i,row in preview_rows.iterrows():
-            pdf.multi_cell(0,6, str(row.to_dict()))
-        pdf.ln(5)
 
         # ---------- SAVE PDF ----------
         pdf.output("output/report.pdf")
 
-        return {"summary": summary, "graphs": graph_paths, "completeness": completeness}
+        # ---------- RETURN ALL METRICS ----------
+        return {
+            "summary": summary,
+            "graphs": graph_paths,
+            "dataframe": df  # returning dataframe for Step 5 preview
+        }
 
     except Exception as e:
         return {"error": str(e)}
-
