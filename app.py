@@ -16,7 +16,7 @@ if uploaded_file is not None:
     with open(temp_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    # ---------- Generate README & PDF ----------
+    # Generate README & PDF
     result = analyze_file(temp_path)
 
     if "error" in result:
@@ -24,23 +24,7 @@ if uploaded_file is not None:
     else:
         st.success("✅ File processed successfully!")
         
-        # ---------- Step 5: File Preview ----------
+        # ---------- Step 5: Only Table Preview ----------
+        st.subheader("📋 File Preview (First 10 Rows)")
         df = result["dataframe"]
-        st.subheader("📋 File Preview")
-        st.write("First 10 rows:")
         st.dataframe(df.head(10))
-
-        st.write("Columns & Data Types:")
-        col_info = df.dtypes.reset_index()
-        col_info.columns = ["Column Name", "Data Type"]
-        st.table(col_info)
-
-        st.subheader("🩺 Dataset Health")
-        st.write(f"Total Columns: {result['summary']['columns']}")
-        st.write(f"Numeric Columns: {result['summary']['numeric_count']}")
-        st.write(f"Categorical Columns: {result['summary']['categorical_count']}")
-        st.write(f"Completeness: {result['summary']['completeness']}%")
-
-        st.subheader("📊 Generated Graphs")
-        for graph in result["graphs"]:
-            st.image(graph, caption=os.path.basename(graph))
