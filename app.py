@@ -1,51 +1,48 @@
 import streamlit as st
 import pandas as pd
-from parser import analyze_file  # your existing parser.py
+import seaborn as sns
+import matplotlib.pyplot as plt
+import plotly.express as px
+from parser import analyze_file
 import os
 
 # ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="📄 Auto-Documenter",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="📄 Auto-Documenter", page_icon="📊", layout="wide")
+
+# ---------- THEME ----------
+theme = st.sidebar.radio("🌗 Theme", ["Light", "Dark"])
+if theme == "Dark":
+    st.markdown("<style>body{background-color:#222;color:white;}</style>", unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("""
-# 📄 Auto-Documenter
-Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.
-""")
+st.markdown("# 📄 Auto-Documenter")
+st.markdown("Upload a CSV, Excel, JSON, or Python file to automatically generate documentation.")
 st.markdown("---")
 
-# ---------- SIDEBAR SETTINGS ----------
+# ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
-    preview_rows = st.number_input("Number of preview rows", min_value=5, max_value=50, value=10)
-    show_graphs = st.checkbox("Show Column Graphs", value=True)
+    preview_rows = st.number_input("Preview Rows", min_value=5, max_value=50, value=10, help="Number of rows to preview in the table")
+    show_graphs = st.checkbox("Show Column Graphs", value=True, help="Display interactive graphs for numeric columns")
+    show_corr = st.checkbox("Show Correlation Heatmap", value=True, help="Display heatmap of correlations between numeric columns")
 
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader(
-    "Choose a file",
-    type=["csv", "xlsx", "xls", "json", "py"]
-)
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json", "py"])
 
 if uploaded_file:
     # ---------- FILE PREVIEW ----------
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df_preview = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(('.xlsx', '.xls')):
-            df_preview = pd.read_excel(uploaded_file)
-        elif uploaded_file.name.endswith('.json'):
-            df_preview = pd.read_json(uploaded_file)
-        else:
-            df_preview = pd.DataFrame()  # for Python file, skip preview
+    if uploaded_file.name.endswith('.csv'):
+        df_preview = pd.read_csv(uploaded_file)
+    elif uploaded_file.name.endswith(('.xlsx', '.xls')):
+        df_preview = pd.read_excel(uploaded_file)
+    elif uploaded_file.name.endswith('.json'):
+        df_preview = pd.read_json(uploaded_file)
+    else:
+        df_preview = pd.DataFrame()  # Python file
 
-        if not df_preview.empty:
-            st.markdown("### 🔍 File Preview")
-            st.dataframe(df_preview.head(preview_rows))
-    except Exception as e:
-        st.error(f"Error reading file: {e}")
+    if not df_preview.empty:
+        st.markdown("### 🔍 File Preview")
+        st.dataframe(df_preview.head(preview_rows))
 
     # ---------- GENERATE DOCUMENTATION ----------
     if st.button("🚀 Generate Documentation"):
@@ -62,27 +59,59 @@ if uploaded_file:
         else:
             st.success("✅ Documentation generated successfully!")
 
-            # ---------- FILE HEALTH ----------
-            st.markdown("### 🩺 File Health Summary")
             summary = result.get("summary", {})
-            cols = summary.get("columns", 0)
             rows = summary.get("rows", 0)
-            st.metric("Rows", rows)
-            st.metric("Columns", cols)
-
-            numeric_count = len(df_preview.select_dtypes(include='number').columns)
+            cols = summary.get("columns", 0)
+            numeric_cols = df_preview.select_dtypes(include='number').columns
+            numeric_count = len(numeric_cols)
             categorical_count = len(df_preview.select_dtypes(exclude='number').columns)
-            st.metric("Numeric Columns", numeric_count)
-            st.metric("Categorical Columns", categorical_count)
-
             completeness = round(df_preview.notna().sum().sum() / (rows*cols) * 100, 2) if rows and cols else 0
-            st.metric("Completeness (%)", completeness)
 
-            # ---------- SHOW GRAPHS ----------
+            # ---------- METRIC CARDS ----------
+            st.markdown("### 📊 Dataset Metrics")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("📝 Rows", rows, delta_color="normal")
+            col2.metric("📂 Columns", cols, delta_color="normal")
+            col3.metric("🔢 Numeric Columns", numeric_count, delta_color="normal")
+            col4.metric("🗂 Categorical Columns", categorical_count, delta_color="normal")
+            st.metric("✅ Completeness (%)", completeness)
+
+            # ---------- WARNINGS ----------
+            warnings = []
+            for col in df_preview.columns:
+                if df_preview[col].nunique() > 50:
+                    warnings.append(f"Column '{col}' has >50 unique values")
+                if df_preview[col].isna().sum() / rows * 100 > 50:
+                    warnings.append(f"Column '{col}' has >50% missing values")
+            if warnings:
+                st.markdown("### ⚠ Warnings")
+                for w in warnings:
+                    st.warning(w)
+            else:
+                st.success("No major warnings detected ✅")
+
+            # ---------- COLUMN MIN/MAX ----------
+            st.markdown("### 📌 Column Min/Max")
+            for col in numeric_cols:
+                series = df_preview[col]
+                min_val = series.min()
+                max_val = series.max()
+                st.info(f"**{col}** → Min: {min_val} | Max: {max_val}")
+
+            # ---------- COLUMN GRAPHS ----------
             if show_graphs and result.get("graphs"):
-                st.markdown("### 📊 Column Graphs")
-                for g in result["graphs"]:
-                    st.image(g, use_column_width=True)
+                with st.expander("📊 Column Graphs", expanded=True):
+                    for col in numeric_cols:
+                        fig = px.line(df_preview, y=col, title=f"{col} Interactive Graph", labels={"index": "Index"})
+                        st.plotly_chart(fig, use_container_width=True)
+
+            # ---------- CORRELATION HEATMAP ----------
+            if show_corr and numeric_count > 1:
+                with st.expander("🔥 Correlation Heatmap", expanded=False):
+                    plt.figure(figsize=(10, 6))
+                    sns.heatmap(df_preview[numeric_cols].corr(), annot=True, cmap="coolwarm", linewidths=0.5)
+                    st.pyplot(plt)
+                    plt.close()
 
             # ---------- DOWNLOAD PDF ----------
             pdf_path = "output/report.pdf"
