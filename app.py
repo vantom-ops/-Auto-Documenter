@@ -57,14 +57,15 @@ if uploaded_file:
     st.dataframe(missing_pct, use_container_width=True)
 
     # ---------- COLUMN GRAPHS ----------
-    with st.expander("📈 Column Graphs (Min → Avg → Max Gradient)"):
+    with st.expander("📈 Column Graphs"):
         for col in numeric_cols:
             col_min = df[col].min()
             col_max = df[col].max()
             col_avg = round(df[col].mean(), 2)
 
-            with st.expander(f"{col} (Click to expand min/max details)"):
-                st.markdown(f"**Average:** {col_avg}")
+            with st.expander(f"{col} (Min/Avg/Max & Trend Graph)"):
+                st.markdown(f"**Min:** {col_min} | **Avg:** {col_avg} | **Max:** {col_max}")
+
                 # Gradient horizontal bar for Min → Avg → Max
                 bar_fig = go.Figure(go.Bar(
                     x=[col_avg],
@@ -81,7 +82,12 @@ if uploaded_file:
                 bar_fig.update_layout(xaxis_title="Value", yaxis_title="", height=100, margin=dict(l=20, r=20, t=20, b=20))
                 st.plotly_chart(bar_fig, use_container_width=True)
 
-                st.markdown(f"Min: {col_min} | Max: {col_max}")
+                # Full line graph
+                line_fig = px.line(df, y=col, title=f"{col} Trend", markers=True)
+                line_fig.add_hline(y=col_min, line_dash="dash", line_color="red", annotation_text="Min")
+                line_fig.add_hline(y=col_max, line_dash="dash", line_color="green", annotation_text="Max")
+                line_fig.add_hline(y=col_avg, line_dash="dot", line_color="yellow", annotation_text="Avg")
+                st.plotly_chart(line_fig, use_container_width=True)
 
     # ---------- CORRELATION HEATMAP ----------
     if len(numeric_cols) > 1:
