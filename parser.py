@@ -82,7 +82,15 @@ def analyze_file(file_path):
             f.write(f"File Name: {file_name}\n\n")
             f.write(f"Total Rows: {summary['rows']}\n")
             f.write(f"Total Columns: {summary['columns']}\n\n")
-            f.write("COLUMN INSIGHTS\n\n")
+
+            # Add Step 5 health info to README
+            f.write("DATASET HEALTH\n\n")
+            f.write(f"Completeness: {completeness}%\n")
+            f.write(f"Numeric Columns: {len(numeric_cols)} ({numeric_ratio}%)\n")
+            f.write(f"Categorical Columns: {len(categorical_cols)} ({categorical_ratio}%)\n")
+            if high_unique_cols:
+                f.write(f"Columns with >50 unique values: {', '.join(high_unique_cols)}\n")
+            f.write("\nCOLUMN INSIGHTS\n\n")
 
         # ---------- INIT PDF ----------
         pdf = FPDF()
@@ -94,7 +102,19 @@ def analyze_file(file_path):
         pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
         pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
         pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
+
+        # Add Step 5 health info to PDF
         pdf.ln(6)
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "DATASET HEALTH", ln=True)
+        pdf.set_font("Arial", "", 12)
+        pdf.cell(0, 8, f"Completeness: {completeness}%", ln=True)
+        pdf.cell(0, 8, f"Numeric Columns: {len(numeric_cols)} ({numeric_ratio}%)", ln=True)
+        pdf.cell(0, 8, f"Categorical Columns: {len(categorical_cols)} ({categorical_ratio}%)", ln=True)
+        if high_unique_cols:
+            pdf.multi_cell(0, 8, f"Columns with >50 unique values: {', '.join(high_unique_cols)}")
+        pdf.ln(6)
+
         pdf.set_font("Arial", "B", 14)
         pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
         pdf.set_font("Arial", "", 11)
