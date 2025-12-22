@@ -70,41 +70,39 @@ if uploaded_file:
             # ---------- METRIC CARDS ----------
             st.markdown("### 📊 Dataset Metrics")
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("📝 Rows", rows)
-            col2.metric("📂 Columns", cols)
-            col3.metric("🔢 Numeric Columns", numeric_count)
-            col4.metric("🗂 Categorical Columns", categorical_count)
+            col1.metric("📝 Rows", rows, delta_color="normal")
+            col2.metric("📂 Columns", cols, delta_color="normal")
+            col3.metric("🔢 Numeric Columns", numeric_count, delta_color="normal")
+            col4.metric("🗂 Categorical Columns", categorical_count, delta_color="normal")
             st.metric("✅ Completeness (%)", completeness)
 
-            # ---------- WARNINGS WITH GRADIENT BARS ----------
+            # ---------- WARNINGS ----------
             warnings = []
-            warning_data = []
             for col in df_preview.columns:
-                missing_pct = df_preview[col].isna().sum() / rows * 100
                 if df_preview[col].nunique() > 50:
-                    warnings.append(f"{col} has >50 unique values")
-                    warning_data.append({"Column": col, "Type": "High Unique Values", "Percentage": 100})
-                if missing_pct > 50:
-                    warnings.append(f"{col} has >50% missing values")
-                    warning_data.append({"Column": col, "Type": "High Missing Values", "Percentage": missing_pct})
+                    warnings.append(f"{col}: >50 unique values")
+                if df_preview[col].isna().sum() / rows * 100 > 50:
+                    warnings.append(f"{col}: >50% missing values")
 
-            if warning_data:
-                st.markdown("### ⚠ Warnings (Percentage Bar with Severity)")
-                for w in warning_data:
-                    pct = w['Percentage']
-                    if pct < 50:
-                        color = "#ffeb3b"  # yellow
-                    elif pct < 75:
-                        color = "#ff9800"  # orange
-                    else:
-                        color = "#ff4c4c"  # red
-
-                    st.markdown(f"""
-                        <div style="margin-bottom:5px; font-weight:bold">{w['Column']} - {w['Type']}</div>
-                        <div style="background-color:#ddd; border-radius:5px; height:20px; width:100%;">
-                            <div style="background-color:{color}; width:{pct}%; height:100%; border-radius:5px;"></div>
-                        </div>
-                    """, unsafe_allow_html=True)
+            if warnings:
+                st.markdown("### ⚠ Warnings")
+                # Display as horizontal bars
+                warning_df = pd.DataFrame({
+                    "Column": [w.split(":")[0] for w in warnings],
+                    "Issue": [w.split(":")[1] for w in warnings],
+                    "Percent": [float('50')]*len(warnings)  # placeholder for bar length
+                })
+                fig_warn = px.bar(
+                    warning_df,
+                    y="Column",
+                    x="Percent",
+                    orientation='h',
+                    color="Percent",
+                    color_continuous_scale="reds",
+                    text="Issue",
+                    labels={"Percent": "% Issue"}
+                )
+                st.plotly_chart(fig_warn, use_container_width=True)
             else:
                 st.success("No major warnings detected ✅")
 
@@ -123,13 +121,17 @@ if uploaded_file:
                         fig = px.line(df_preview, y=col, title=f"{col} Interactive Graph", labels={"index": "Index"})
                         st.plotly_chart(fig, use_container_width=True)
 
-            # ---------- CORRELATION HEATMAP ----------
+            # ---------- CORRELATION HEATMAP + TABLE ----------
             if show_corr and numeric_count > 1:
-                with st.expander("🔥 Correlation Heatmap", expanded=False):
+                with st.expander("🔥 Correlation Heatmap & Table", expanded=False):
                     plt.figure(figsize=(10, 6))
-                    sns.heatmap(df_preview[numeric_cols].corr(), annot=True, cmap="coolwarm", linewidths=0.5)
+                    corr_matrix = df_preview[numeric_cols].corr()
+                    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", linewidths=0.5)
                     st.pyplot(plt)
                     plt.close()
+
+                    st.markdown("### 📋 Correlation Table")
+                    st.dataframe(corr_matrix.style.background_gradient(cmap="coolwarm").format("{:.2f}"))
 
             # ---------- DOWNLOAD PDF ----------
             pdf_path = "output/report.pdf"
