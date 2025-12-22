@@ -23,8 +23,20 @@ if uploaded_file is not None:
         st.error(result["error"])
     else:
         st.success("✅ File processed successfully!")
-        
-        # ---------- Step 5: Only Table Preview ----------
+
+        # ---------- Step 5: Table Preview ----------
         st.subheader("📋 File Preview (First 10 Rows)")
         df = result["dataframe"]
         st.dataframe(df.head(10))
+
+        # ---------- PDF Download ----------
+        pdf_file_path = "output/report.pdf"
+        if os.path.exists(pdf_file_path):
+            with open(pdf_file_path, "rb") as f:
+                pdf_bytes = f.read()
+            st.download_button(
+                label="📥 Download PDF Report",
+                data=pdf_bytes,
+                file_name="report.pdf",
+                mime="application/pdf"
+            )
