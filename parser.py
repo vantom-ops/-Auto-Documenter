@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import json
 from fpdf import FPDF
 
@@ -9,8 +8,6 @@ def analyze_file(file_path):
 
     file_name = os.path.basename(file_path)
     ext = os.path.splitext(file_name)[1].lower()
-
-    image_paths = []
 
     try:
         # ---------- READ FILE ----------
@@ -39,76 +36,75 @@ def analyze_file(file_path):
         else:
             return {"error": "Unsupported file type"}
 
-        # ---------- SUMMARY ----------
+        # ---------- BASIC SUMMARY ----------
         summary = {
             "rows": len(df),
             "columns": len(df.columns),
             "column_names": list(df.columns)
         }
 
-        # ---------- README ----------
+        # ---------- README WITH SMART INSIGHTS ----------
         readme_path = "output/README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write("AUTO GENERATED DOCUMENTATION\n\n")
             f.write(f"File Name: {file_name}\n\n")
             f.write(f"Total Rows: {summary['rows']}\n")
             f.write(f"Total Columns: {summary['columns']}\n\n")
-            f.write("COLUMNS\n\n")
+            f.write("COLUMN INSIGHTS\n\n")
+
             for col in df.columns:
-                f.write(f"- {col} ({df[col].dtype})\n")
+                total = len(df[col])
+                missing = df[col].isna().sum()
+                missing_pct = round((missing / total) * 100, 2)
+                unique = df[col].nunique(dropna=True)
+                samples = df[col].dropna().unique()[:5]
 
-        # ---------- NUMERIC CHART ----------
-        numeric_cols = df.select_dtypes(include="number").columns
-        if len(numeric_cols) > 0:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            df[numeric_cols].hist(ax=ax)
-            plt.tight_layout()
-
-            num_img = "output/numeric_summary.png"
-            plt.savefig(num_img)
-            plt.close()
-
-            image_paths.append(num_img)
-
-        # ---------- CATEGORICAL CHARTS ----------
-        cat_cols = df.select_dtypes(include="object").columns
-        for col in cat_cols:
-            if df[col].nunique() <= 10:
-                fig, ax = plt.subplots(figsize=(6, 4))
-                df[col].value_counts().plot(kind="bar", ax=ax)
-                ax.set_title(col)
-                plt.tight_layout()
-
-                img_path = f"output/{col}_chart.png"
-                plt.savefig(img_path)
-                plt.close()
-
-                image_paths.append(img_path)
+                f.write(f"Column Name: {col}\n")
+                f.write(f"Data Type: {df[col].dtype}\n")
+                f.write(f"Total Values: {total}\n")
+                f.write(f"Missing Values: {missing}\n")
+                f.write(f"Missing Percentage: {missing_pct}%\n")
+                f.write(f"Unique Values: {unique}\n")
+                f.write(f"Sample Values: {', '.join(map(str, samples))}\n")
+                f.write("-" * 40 + "\n")
 
         # ---------- PDF GENERATION ----------
         pdf = FPDF()
         pdf.add_page()
+
         pdf.set_font("Arial", "B", 16)
         pdf.cell(0, 10, "AUTO GENERATED DOCUMENTATION", ln=True)
 
         pdf.set_font("Arial", "", 12)
-        pdf.ln(5)
+        pdf.ln(4)
         pdf.cell(0, 8, f"File Name: {file_name}", ln=True)
         pdf.cell(0, 8, f"Total Rows: {summary['rows']}", ln=True)
         pdf.cell(0, 8, f"Total Columns: {summary['columns']}", ln=True)
 
-        pdf.ln(5)
+        pdf.ln(6)
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, "COLUMNS", ln=True)
+        pdf.cell(0, 10, "COLUMN INSIGHTS", ln=True)
 
         pdf.set_font("Arial", "", 11)
         for col in df.columns:
-            pdf.multi_cell(0, 7, f"{col} ({df[col].dtype})")
+            total = len(df[col])
+            missing = df[col].isna().sum()
+            missing_pct = round((missing / total) * 100, 2)
+            unique = df[col].nunique(dropna=True)
+            samples = df[col].dropna().unique()[:5]
 
-        # ---------- INSERT IMAGES INTO PDF ----------
-        for img in image_paths:
-            pdf.add_page()
-            pdf.image(img, w=180)
+            pdf.multi_cell(
+                0, 7,
+                f"Column Name: {col}\n"
+                f"Data Type: {df[col].dtype}\n"
+                f"Total Values: {total}\n"
+                f"Missing Values: {missing}\n"
+                f"Missing Percentage: {missing_pct}%\n"
+                f"Unique Values: {unique}\n"
+                f"Sample Values: {', '.join(map(str, samples))}\n"
+                + "-" * 40
+            )
+            pdf.ln(2)
 
         pdf.output("output/report.pdf")
 
