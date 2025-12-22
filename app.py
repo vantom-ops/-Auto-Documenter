@@ -100,13 +100,39 @@ if uploaded_file:
             else:
                 st.success("No major warnings detected ✅")
 
-            # ---------- COLUMN MIN/MAX ----------
-            st.markdown("### 📌 Column Min/Max")
-            for col in numeric_cols:
-                series = df_preview[col]
-                min_val = series.min()
-                max_val = series.max()
-                st.info(f"**{col}** → Min: {min_val} | Max: {max_val}")
+            # ---------- WARNINGS ----------
+warnings = []
+warning_data = []
+for col in df_preview.columns:
+    missing_pct = df_preview[col].isna().sum() / rows * 100
+    if df_preview[col].nunique() > 50:
+        warnings.append(f"{col} has >50 unique values")
+        warning_data.append({"Column": col, "Type": "High Unique Values", "Percentage": 100})
+    if missing_pct > 50:
+        warnings.append(f"{col} has >50% missing values")
+        warning_data.append({"Column": col, "Type": "High Missing Values", "Percentage": missing_pct})
+
+if warnings:
+    st.markdown("### ⚠ Warnings (Percentage Bar with Severity)")
+    for w in warning_data:
+        # Determine color based on percentage
+        pct = w['Percentage']
+        if pct < 50:
+            color = "#ffeb3b"  # yellow
+        elif pct < 75:
+            color = "#ff9800"  # orange
+        else:
+            color = "#ff4c4c"  # red
+
+        st.markdown(f"""
+            <div style="margin-bottom:5px; font-weight:bold">{w['Column']} - {w['Type']}</div>
+            <div style="background-color:#ddd; border-radius:5px; height:20px; width:100%;">
+                <div style="background-color:{color}; width:{pct}%; height:100%; border-radius:5px;"></div>
+            </div>
+        """, unsafe_allow_html=True)
+else:
+    st.success("No major warnings detected ✅")
+
 
             # ---------- COLUMN GRAPHS ----------
             if show_graphs and result.get("graphs"):
@@ -136,3 +162,4 @@ if uploaded_file:
                     file_name="report.pdf",
                     mime="application/pdf"
                 )
+
