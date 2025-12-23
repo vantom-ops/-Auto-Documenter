@@ -13,58 +13,60 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CUSTOM CSS FOR BIG DOWNLOAD BUTTON & UI ---
+# --- CUSTOM UI/UX CSS ---
 st.markdown("""
     <style>
-    /* Big prominent download button at bottom */
+    /* Big prominent download button at the very bottom */
     div.stDownloadButton > button {
         width: 100% !important;
-        height: 70px !important;
-        background-color: #1f77b4 !important;
+        height: 75px !important;
+        background-color: #0047AB !important;
         color: white !important;
-        font-size: 22px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
-        border: 2px solid #155a8a !important;
         border-radius: 12px !important;
-        margin-top: 30px !important;
-        transition: 0.3s;
+        border: 3px solid #002D62 !important;
+        margin-top: 40px !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
     }
-    div.stDownloadButton > button:hover {
-        background-color: #155a8a !important;
-        border-color: #0d3d5d !important;
+    
+    /* ML Readiness Graphic Bar */
+    .ml-container {
+        background-color: #f0f2f6;
+        border-radius: 20px;
+        width: 100%;
+        height: 35px;
+        border: 1px solid #d1d5db;
+        overflow: hidden;
+        margin-top: 10px;
     }
-    /* Style for the ML Bar container */
-    .ml-bar-bg {
-        background-color: #e0e0e0; 
-        border-radius: 15px; 
-        width: 100%; 
-        height: 30px; 
-        position: relative;
-        margin-bottom: 10px;
-    }
-    .ml-bar-fill {
-        height: 100%; 
-        border-radius: 15px; 
-        display: flex; 
-        align-items: center; 
+    .ml-fill {
+        height: 100%;
+        display: flex;
+        align-items: center;
         justify-content: center;
-        color: white;
+        color: black;
         font-weight: bold;
-        transition: width 1s ease-in-out;
+        font-size: 14px;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload a file to generate professional documentation and a downloadable PDF report.")
+st.markdown("Generate professional interactive documentation and PDF reports from your datasets.")
 st.markdown("---")
+
+# ---------- SIDEBAR ----------
+with st.sidebar:
+    st.header("⚙ Settings")
+    preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
 # ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    # Read file for preview
+    # 1. Load data for UI
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
@@ -76,17 +78,17 @@ if uploaded_file:
         st.stop()
 
     st.markdown("## 🔍 File Preview")
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- ACTION BUTTON ----------
-    if st.button("🚀 Run Analysis & Generate PDF"):
-        with st.spinner("Analyzing data and building report..."):
+    # ---------- GENERATION BUTTON ----------
+    if st.button("🚀 Run Analysis & Generate Documentation"):
+        with st.spinner("Processing data and generating PDF..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Call your parser.py function
+            # Call parser and store result in session state
             result = analyze_file(temp_path)
             st.session_state['analysis_result'] = result
 
@@ -94,77 +96,120 @@ if uploaded_file:
     if 'analysis_result' in st.session_state:
         result = st.session_state['analysis_result']
         
-        st.markdown("## 📊 Dataset Overview")
+        if "error" in result:
+            st.error(f"Error: {result['error']}")
+            st.stop()
+
+        st.success("✅ Documentation generated successfully!")
+
+        # --- METRICS ---
+        st.markdown("## 📊 Dataset Metrics")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Rows", result['summary']['rows'])
-        c2.metric("Total Columns", result['summary']['columns'])
+        c1.metric("Rows", result['summary']['rows'])
+        c2.metric("Columns", result['summary']['columns'])
         c3.metric("Numeric", result['numeric_count'])
         c4.metric("Categorical", result['categorical_count'])
 
-        # --- OLD TYPE GRAPH (Traditional Professional Style) ---
-        st.markdown("## 📉 Trend Analysis (Old-Type Style)")
+        # --- STATISTICS ---
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        # Filter constant columns
-        selectable = [c for c in numeric_cols if df[c].nunique() > 1]
-        
-        if selectable:
-            target_col = st.selectbox("Select metric to visualize:", selectable)
-            
-            # Formatting timeline X-axis
-            plot_df = df.copy()
-            x_axis = None
-            for c in df.columns:
-                if any(k in c.lower() for k in ['period', 'year', 'date']):
-                    x_axis = c
-                    plot_df[x_axis] = plot_df[x_axis].astype(str) # Remove decimal gaps
-                    break
-            
-            fig = px.line(plot_df, x=x_axis, y=target_col, title=f"Historical Trend: {target_col}")
-            
-            # Apply "Old Type" aesthetics: White background, grey grids, dark blue lines
-            fig.update_traces(line=dict(width=2.5, color="#1f77b4"))
-            fig.update_layout(
-                plot_bgcolor="white",
-                xaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black', ticks="outside"),
-                yaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black', ticks="outside"),
-                font=dict(family="Arial", size=12, color="black")
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("## 📈 Column Statistics")
+        for col in numeric_cols:
+            # We skip columns that are constant (like Magnitude) to keep UI clean
+            if df[col].nunique() <= 1: continue 
 
-        # --- GRAPHIC ML READINESS BAR ---
-        st.markdown("## 🤖 ML Readiness Status")
-        score = 79.28  
+            min_val = df[col].min()
+            avg_val = round(df[col].mean(), 2)
+            max_val = df[col].max()
+
+            st.markdown(f"**{col}**")
+            st.markdown(f"""
+            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:15px; border-radius:3px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:15px; border-radius:3px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:15px; border-radius:3px;"></div>
+            </div>
+            <div style="margin-bottom:10px; font-size:12px;">Min: {min_val} | Avg: {avg_val} | Max: {max_val}</div>
+            """, unsafe_allow_html=True)
+
+        # --- THE "UNDERSTANDABLE" GRAPH SECTION ---
+        with st.expander("📊 Smart Column Graphs (Readable Trends)"):
+            # Filter columns that actually change
+            dynamic_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+            
+            if dynamic_cols:
+                selected_col = st.selectbox("Select metric to analyze trend:", dynamic_cols)
+                
+                # Search for a Time/Period column
+                x_axis = None
+                for c in df.columns:
+                    if any(key in c.lower() for key in ['period', 'year', 'date']):
+                        x_axis = c
+                        break
+                
+                if x_axis:
+                    # AGGREGATION: Solve the "Barcode" messy line issue
+                    clean_df = df.groupby(x_axis)[selected_col].mean().reset_index()
+                    clean_df[x_axis] = clean_df[x_axis].astype(str) # Remove decimal gaps
+                    
+                    fig = px.line(clean_df, x=x_axis, y=selected_col, 
+                                  title=f"Trend: Average {selected_col} by {x_axis}", 
+                                  markers=True)
+                else:
+                    fig = px.line(df, y=selected_col, title=f"{selected_col} Values (Index View)")
+
+                # Apply "Old-School" Professional Styling
+                fig.update_traces(line=dict(width=2, color="#1f77b4"), marker=dict(size=6))
+                fig.update_layout(
+                    plot_bgcolor="white",
+                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black'),
+                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black'),
+                    font=dict(family="Arial")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No variable numeric data found for trending.")
+
+        # --- ML READINESS (GRAPHIC BAR) ---
+        st.markdown("## 🤖 ML Readiness Score")
+        score = 79.28  # Static as requested
+        bar_color = "#00cc66" if score > 75 else "#ffea00"
         
-        # Color transition logic
-        bar_color = "#00cc66" if score > 75 else "#ffcc00" if score > 50 else "#ff4b4b"
-        
-        st.markdown(f"**Current Score: {score}/100**")
+        st.markdown(f"**Readiness Level: {score}/100**")
         st.markdown(f"""
-            <div class="ml-bar-bg">
-                <div class="ml-bar-fill" style="width: {score}%; background-color: {bar_color};">
+            <div class="ml-container">
+                <div class="ml-fill" style="width:{score}%; background-color:{bar_color};">
                     {score}%
                 </div>
             </div>
-            <p style='font-size: 14px; color: #666;'>Suggested Algorithms: Random Forest, XGBoost, Linear Regression</p>
+            <br>
         """, unsafe_allow_html=True)
 
-        # --- MISSING VALUES ---
-        with st.expander("⚠ Data Quality Warnings"):
+        # --- HEATMAP & WARNINGS ---
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.markdown("### 🔥 Correlation Heatmap")
+            if len(numeric_cols) > 1:
+                # Filter constant columns from correlation to avoid 'None'
+                corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+                if corr_cols:
+                    corr = df[corr_cols].corr().round(2)
+                    fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+        with c_right:
+            st.markdown("### ⚠ Missing Data %")
             missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-            st.write("Percentage of Missing Data per Column:")
-            st.dataframe(missing_pct)
+            st.dataframe(missing_pct, use_container_width=True)
 
-        # --- BIG PDF DOWNLOAD BUTTON AT BOTTOM ---
+        # --- THE BIG DOWNLOAD BUTTON (BOTTOM) ---
         st.markdown("---")
         pdf_path = "output/report.pdf"
-        
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
                 st.download_button(
-                    label="📥 DOWNLOAD COMPLETED PDF REPORT",
+                    label="📥 DOWNLOAD FULL DOCUMENTATION REPORT (PDF)",
                     data=f,
-                    file_name=f"Report_{uploaded_file.name.split('.')[0]}.pdf",
+                    file_name=f"Data_Report_{uploaded_file.name.split('.')[0]}.pdf",
                     mime="application/pdf"
                 )
         else:
-            st.warning("Analysis complete, but PDF file not found in 'output/' folder.")
+            st.error("PDF file not found. Ensure your parser.py saves the file to 'output/report.pdf'.")
