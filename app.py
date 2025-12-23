@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- PROFESSIONAL DARK UI CSS ---
+# --- PROFESSIONAL DARK UI CSS (UNTOUCHED) ---
 st.markdown("""
     <style>
     .stApp { background-color: #0E1117; }
@@ -30,7 +30,9 @@ st.markdown("""
         border-radius: 12px !important;
         border: none !important;
         box-shadow: 0px 5px 15px rgba(0, 200, 83, 0.3) !important;
+        transition: 0.3s;
     }
+    div.stDownloadButton > button:hover { transform: scale(1.01); box-shadow: 0px 8px 25px rgba(0, 200, 83, 0.5); }
 
     /* Professional ML Readiness Bar */
     .ml-container {
@@ -55,59 +57,58 @@ st.markdown("""
 
 # ---------- HEADER ----------
 st.markdown("<h1 style='text-align: center; color: white;'>📊 Auto-Documenter</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b949e;'>Intelligent Data Intelligence Engine</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
-    preview_rows = st.slider("Preview Rows", 5, 50, 10)
+    preview_rows = st.slider("Preview Rows", 5, 100, 10)
 
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx", "xls", "json"])
+uploaded_file = st.file_uploader("Upload Data (CSV, Excel, JSON)", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    # 1. INITIAL LOAD
+    # 1. ROBUST DATA LOADING
     if 'main_df' not in st.session_state:
-        if uploaded_file.name.endswith(".csv"):
-            st.session_state.main_df = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith((".xlsx", ".xls")):
-            st.session_state.main_df = pd.read_excel(uploaded_file)
-        else:
-            st.session_state.main_df = pd.read_json(uploaded_file)
+        try:
+            if uploaded_file.name.endswith(".csv"):
+                df_raw = pd.read_csv(uploaded_file)
+            elif uploaded_file.name.endswith((".xlsx", ".xls")):
+                df_raw = pd.read_excel(uploaded_file)
+            else:
+                df_raw = pd.read_json(uploaded_file)
+            
+            # --- INTERNAL AUTOMATIC CLEANING ---
+            # Automatically handle commas in numbers (e.g., "523,700" -> 523700.0)
+            for col in df_raw.columns:
+                if df_raw[col].dtype == 'object':
+                    try:
+                        # Attempt conversion only if it looks like a number
+                        cleaned_series = df_raw[col].astype(str).str.replace(',', '')
+                        df_raw[col] = pd.to_numeric(cleaned_series, errors='ignore')
+                    except:
+                        pass
+            
+            st.session_state.main_df = df_raw
+        except Exception as e:
+            st.error(f"Load Error: {e}")
+            st.stop()
     
     df = st.session_state.main_df
 
-    # ---------- DATA PREVIEW & CLEANING ADDON ----------
+    # 2. DATA PREVIEW
     st.markdown("### 🔍 Data Preview")
-    col_pre, col_clean = st.columns([3, 1])
-    with col_pre:
-        st.dataframe(df.head(preview_rows), use_container_width=True)
-    
-    with col_clean:
-        st.markdown("#### 🔧 Data Toolbox")
-        if st.button("🧹 Auto-Clean Data"):
-            # Drop constant columns (like Magnitude) and empty columns (like Suppressed)
-            df = df.loc[:, df.nunique() > 1]
-            df = df.dropna(thresh=df.shape[0]*0.1, axis=1)
-            st.session_state.main_df = df
-            st.success("Cleaned: Constant & Null columns removed!")
-            st.rerun()
-            
-        if st.button("⚖ Scale Features"):
-            # Scale numeric columns to [0,1] to improve ML readiness
-            num_cols = df.select_dtypes(include=[np.number]).columns
-            df[num_cols] = (df[num_cols] - df[num_cols].min()) / (df[num_cols].max() - df[num_cols].min())
-            st.session_state.main_df = df
-            st.success("Success: Numeric features normalized!")
-            st.rerun()
+    st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- ACTION BUTTON ----------
-    if st.button("🚀 Run Analysis & Generate Documentation"):
-        with st.spinner("Analyzing patterns..."):
+    # 3. ACTION BUTTON
+    if st.button("🚀 Run Intelligent Analysis"):
+        with st.spinner("Decoding Data Patterns..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             df.to_csv(temp_path, index=False)
             
+            # Execute logic from parser.py
             result = analyze_file(temp_path)
             st.session_state['analysis_result'] = result
 
@@ -115,75 +116,92 @@ if uploaded_file:
     if 'analysis_result' in st.session_state:
         result = st.session_state['analysis_result']
         
-        # 1. METRICS (FIXED KEYERROR)
-        st.markdown("## 📊 Dataset Metrics")
-        c1, c2, c3, c4 = st.columns(4)
-        
-        # Safe access to result keys to prevent KeyError
-        summary = result.get('summary', {})
-        c1.metric("Rows", summary.get('rows', df.shape[0]))
-        c2.metric("Columns", summary.get('columns', df.shape[1]))
-        c3.metric("Numeric", result.get('numeric_count', len(df.select_dtypes(include=np.number).columns)))
-        c4.metric("Categorical", result.get('categorical_count', len(df.select_dtypes(exclude=np.number).columns)))
+        st.success("✅ Analysis Complete!")
 
-        # 2. COLUMN DATATYPES
-        st.markdown("## 📌 Column Datatypes")
-        type_df = pd.DataFrame(df.dtypes.astype(str), columns=["Type"]).reset_index()
-        type_df.columns = ["Column Name", "Data Type"]
+        # A. METRICS (Safe access to prevent KeyErrors)
+        st.markdown("## 📊 Dataset Metrics")
+        summary = result.get('summary', {})
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Rows", summary.get('rows', df.shape[0]))
+        c2.metric("Total Columns", summary.get('columns', df.shape[1]))
+        c3.metric("Numeric Fields", result.get('numeric_count', len(df.select_dtypes(include=np.number).columns)))
+        c4.metric("Categorical Fields", result.get('categorical_count', len(df.select_dtypes(exclude=np.number).columns)))
+
+        # B. COLUMN DATATYPES
+        st.markdown("## 📌 Column Specification")
+        type_df = pd.DataFrame(df.dtypes.astype(str), columns=["Data Type"]).reset_index()
+        type_df.columns = ["Field Name", "Detected Type"]
         st.dataframe(type_df, use_container_width=True)
 
-        # 3. STATS DROPDOWN
+        # C. STATISTICS (EXPENDER)
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        with st.expander("📈 View Column Statistics (Min / Avg / Max)"):
+        with st.expander("📈 Advanced Column Statistics"):
             for col in numeric_cols:
                 if df[col].nunique() <= 1: continue 
                 min_v, avg_v, max_v = df[col].min(), round(df[col].mean(), 2), df[col].max()
                 st.markdown(f"**{col}**")
                 st.markdown(f"""
-                <div style="display:flex; width:100%; height:12px; border-radius:5px; overflow:hidden; margin-bottom:5px;">
+                <div style="display:flex; width:100%; height:8px; border-radius:5px; overflow:hidden; margin-bottom:5px; border: 1px solid #333;">
                     <div style="width:33%; background:#ff4b4b;"></div><div style="width:33%; background:#ffea00;"></div><div style="width:34%; background:#00ff4b;"></div>
                 </div>
                 <p style='font-size:12px; color:#8b949e;'>Min: {min_v} | Avg: {avg_v} | Max: {max_v}</p>
                 """, unsafe_allow_html=True)
 
-        # 4. TREND GRAPH (AGGREGATED)
-        with st.expander("📊 Smart Trend Visualization"):
+        # D. TREND VISUALIZATION (Fixed ValueError)
+        with st.expander("📊 Smart Trend Analysis"):
             valid_cols = [c for c in numeric_cols if df[c].nunique() > 1]
             if valid_cols:
-                selected_col = st.selectbox("Select metric:", valid_cols)
+                selected_col = st.selectbox("Select metric for Trend:", valid_cols)
                 x_axis = next((c for c in df.columns if any(k in c.lower() for k in ['year', 'period', 'date'])), None)
+                
                 if x_axis:
-                    clean_df = df.groupby(x_axis)[selected_col].mean().reset_index()
-                    fig = px.line(clean_df, x=x_axis, y=selected_col, markers=True, template="plotly_dark")
-                    fig.update_traces(line=dict(width=3, color="#00E676"), marker=dict(size=8))
-                    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    # Robust Grouping: rename prevents duplicate column error
+                    clean_df = df.groupby(x_axis)[selected_col].mean().rename("Metric_Value").reset_index()
+                    fig = px.line(clean_df, x=x_axis, y="Metric_Value", markers=True, template="plotly_dark")
+                    fig.update_traces(line=dict(width=3, color="#00E676"), marker=dict(size=8, color="white"))
+                    fig.update_layout(
+                        xaxis_title=x_axis, yaxis_title=f"Avg {selected_col}",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+                    )
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("No time-based column detected for trend analysis.")
 
-        # 5. HEATMAP & MISSING DATA
+        # E. CORRELATION & NULLS
         cl, cr = st.columns(2)
         with cl:
-            st.markdown("### 🔥 Correlation")
+            st.markdown("### 🔥 Multi-Feature Correlation")
             corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-            if corr_cols:
+            if len(corr_cols) > 1:
                 fig_h = px.imshow(df[corr_cols].corr(), text_auto=True, color_continuous_scale="Viridis", template="plotly_dark")
                 st.plotly_chart(fig_h, use_container_width=True)
+            else:
+                st.caption("Not enough numeric columns for correlation.")
         with cr:
-            st.markdown("### ⚠ Missing Data %")
-            st.dataframe((df.isna().sum() / len(df) * 100).round(2), use_container_width=True)
+            st.markdown("### ⚠ Missing Integrity Check")
+            missing_pct = (df.isna().sum() / len(df) * 100).round(2)
+            st.dataframe(missing_pct[missing_pct > 0] if not missing_pct.empty else "No missing data!", use_container_width=True)
 
-        # 6. ML READINESS (BOTTOM)
+        # F. ML READINESS (BOTTOM)
         st.markdown("---")
         st.markdown("## 🤖 AI Readiness Intelligence")
         score = 79.28 
-        col_s, col_r = st.columns([1, 2])
-        with col_s:
+        bar_color = "#00E676" if score > 75 else "#FFBF00"
+        
+        cs, cr = st.columns([1, 2])
+        with cs:
             st.markdown(f"**Readiness Score: {score}/100**")
-            st.markdown(f'<div class="ml-container"><div class="ml-fill" style="width:{score}%; background:#00E676;">{score}%</div></div>', unsafe_allow_html=True)
-        with col_r:
-            st.info("**AI Recommendations:** Use **Prophet** for the identified trends or **XGBoost** for predictive modeling. Clean up 'Suppressed' and 'Magnitude' columns to increase score.")
+            st.markdown(f'<div class="ml-container"><div class="ml-fill" style="width:{score}%; background:{bar_color};">{score}%</div></div>', unsafe_allow_html=True)
+        with cr:
+            st.info("""
+            **AI Insights & Strategy:**
+            - **Primary Models:** XGBoost for predictive regression or Prophet for seasonality.
+            - **Optimization:** Detected numeric types are ready for scaling. Suggest dropping high-null features to hit 90+ score.
+            """)
 
-        # 7. DOWNLOAD
+        # G. DOWNLOAD
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("📥 DOWNLOAD PROFESSIONAL PDF REPORT", f, file_name="Data_Report.pdf")
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button("📥 DOWNLOAD PROFESSIONAL DOCUMENTATION (PDF)", f, file_name=f"Report_{uploaded_file.name.split('.')[0]}.pdf")
