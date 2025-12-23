@@ -13,30 +13,35 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CUSTOM UI/UX CSS ---
+# --- DARK UI CUSTOM CSS ---
 st.markdown("""
     <style>
-    /* Big prominent download button at the very bottom */
+    /* Big prominent download button - DARK UI Style */
     div.stDownloadButton > button {
         width: 100% !important;
         height: 75px !important;
-        background-color: #0047AB !important;
-        color: white !important;
+        background-color: #1E1E1E !important;
+        color: #00FF4B !important; /* Neon green text */
         font-size: 24px !important;
         font-weight: bold !important;
         border-radius: 12px !important;
-        border: 3px solid #002D62 !important;
-        margin-top: 40px !important;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+        border: 2px solid #00FF4B !important;
+        margin-top: 20px !important;
+        box-shadow: 0px 4px 15px rgba(0, 255, 75, 0.2);
+        transition: 0.3s;
+    }
+    div.stDownloadButton > button:hover {
+        background-color: #00FF4B !important;
+        color: #1E1E1E !important;
     }
     
-    /* ML Readiness Graphic Bar */
+    /* ML Readiness Graphic Bar - DARK UI Style */
     .ml-container {
-        background-color: #f0f2f6;
+        background-color: #31333F;
         border-radius: 20px;
         width: 100%;
-        height: 35px;
-        border: 1px solid #d1d5db;
+        height: 40px;
+        border: 1px solid #444;
         overflow: hidden;
         margin-top: 10px;
     }
@@ -45,9 +50,10 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
-        color: black;
+        color: white;
         font-weight: bold;
-        font-size: 14px;
+        font-size: 16px;
+        text-shadow: 1px 1px 2px black;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -66,7 +72,6 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    # 1. Load data for UI
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
@@ -82,13 +87,12 @@ if uploaded_file:
 
     # ---------- GENERATION BUTTON ----------
     if st.button("🚀 Run Analysis & Generate Documentation"):
-        with st.spinner("Processing data and generating PDF..."):
+        with st.spinner("Processing data..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Call parser and store result in session state
             result = analyze_file(temp_path)
             st.session_state['analysis_result'] = result
 
@@ -110,36 +114,32 @@ if uploaded_file:
         c3.metric("Numeric", result['numeric_count'])
         c4.metric("Categorical", result['categorical_count'])
 
-        # --- STATISTICS ---
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        st.markdown("## 📈 Column Statistics")
-        for col in numeric_cols:
-            # We skip columns that are constant (like Magnitude) to keep UI clean
-            if df[col].nunique() <= 1: continue 
 
-            min_val = df[col].min()
-            avg_val = round(df[col].mean(), 2)
-            max_val = df[col].max()
+        # --- COLUMN STATISTICS (NOW IN DROPDOWN/EXPANDER) ---
+        with st.expander("📈 View Column Statistics (Min / Avg / Max)"):
+            for col in numeric_cols:
+                if df[col].nunique() <= 1: continue 
 
-            st.markdown(f"**{col}**")
-            st.markdown(f"""
-            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:15px; border-radius:3px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:15px; border-radius:3px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:15px; border-radius:3px;"></div>
-            </div>
-            <div style="margin-bottom:10px; font-size:12px;">Min: {min_val} | Avg: {avg_val} | Max: {max_val}</div>
-            """, unsafe_allow_html=True)
+                min_val = df[col].min()
+                avg_val = round(df[col].mean(), 2)
+                max_val = df[col].max()
+
+                st.markdown(f"**{col}**")
+                st.markdown(f"""
+                <div style="display:flex; gap:4px; margin-bottom:4px;">
+                    <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:15px; border-radius:3px;"></div>
+                    <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:15px; border-radius:3px;"></div>
+                    <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:15px; border-radius:3px;"></div>
+                </div>
+                <div style="margin-bottom:10px; font-size:12px;">Min: {min_val} | Avg: {avg_val} | Max: {max_val}</div>
+                """, unsafe_allow_html=True)
 
         # --- THE "UNDERSTANDABLE" GRAPH SECTION ---
         with st.expander("📊 Smart Column Graphs (Readable Trends)"):
-            # Filter columns that actually change
             dynamic_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-            
             if dynamic_cols:
                 selected_col = st.selectbox("Select metric to analyze trend:", dynamic_cols)
-                
-                # Search for a Time/Period column
                 x_axis = None
                 for c in df.columns:
                     if any(key in c.lower() for key in ['period', 'year', 'date']):
@@ -147,61 +147,47 @@ if uploaded_file:
                         break
                 
                 if x_axis:
-                    # AGGREGATION: Solve the "Barcode" messy line issue
                     clean_df = df.groupby(x_axis)[selected_col].mean().reset_index()
-                    clean_df[x_axis] = clean_df[x_axis].astype(str) # Remove decimal gaps
-                    
-                    fig = px.line(clean_df, x=x_axis, y=selected_col, 
-                                  title=f"Trend: Average {selected_col} by {x_axis}", 
-                                  markers=True)
+                    clean_df[x_axis] = clean_df[x_axis].astype(str)
+                    fig = px.line(clean_df, x=x_axis, y=selected_col, markers=True, template="plotly_dark")
                 else:
-                    fig = px.line(df, y=selected_col, title=f"{selected_col} Values (Index View)")
+                    fig = px.line(df, y=selected_col, template="plotly_dark")
 
-                # Apply "Old-School" Professional Styling
-                fig.update_traces(line=dict(width=2, color="#1f77b4"), marker=dict(size=6))
-                fig.update_layout(
-                    plot_bgcolor="white",
-                    xaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black'),
-                    yaxis=dict(showgrid=True, gridcolor='#f0f0f0', linecolor='black'),
-                    font=dict(family="Arial")
-                )
+                fig.update_traces(line=dict(width=2, color="#00FF4B")) # Neon green line
+                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No variable numeric data found for trending.")
-
-        # --- ML READINESS (GRAPHIC BAR) ---
-        st.markdown("## 🤖 ML Readiness Score")
-        score = 79.28  # Static as requested
-        bar_color = "#00cc66" if score > 75 else "#ffea00"
-        
-        st.markdown(f"**Readiness Level: {score}/100**")
-        st.markdown(f"""
-            <div class="ml-container">
-                <div class="ml-fill" style="width:{score}%; background-color:{bar_color};">
-                    {score}%
-                </div>
-            </div>
-            <br>
-        """, unsafe_allow_html=True)
 
         # --- HEATMAP & WARNINGS ---
         c_left, c_right = st.columns(2)
         with c_left:
             st.markdown("### 🔥 Correlation Heatmap")
-            if len(numeric_cols) > 1:
-                # Filter constant columns from correlation to avoid 'None'
-                corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-                if corr_cols:
-                    corr = df[corr_cols].corr().round(2)
-                    fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-                    st.plotly_chart(fig_heat, use_container_width=True)
+            corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+            if corr_cols:
+                corr = df[corr_cols].corr().round(2)
+                fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="Viridis", template="plotly_dark")
+                st.plotly_chart(fig_heat, use_container_width=True)
         with c_right:
             st.markdown("### ⚠ Missing Data %")
             missing_pct = (df.isna().sum() / len(df) * 100).round(2)
             st.dataframe(missing_pct, use_container_width=True)
 
-        # --- THE BIG DOWNLOAD BUTTON (BOTTOM) ---
+        # --- ML READINESS (MOVED TO BOTTOM) ---
         st.markdown("---")
+        st.markdown("## 🤖 ML Readiness Score")
+        score = 79.28  
+        # Dark UI colors: Neon Green for high score, Amber for medium
+        bar_color = "#00FF4B" if score > 75 else "#FFBF00"
+        
+        st.markdown(f"**Readiness Level: {score}/100**")
+        st.markdown(f"""
+            <div class="ml-container">
+                <div class="ml-fill" style="width:{score}%; background-color:{bar_color}; color: black;">
+                    {score}%
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # --- THE BIG DOWNLOAD BUTTON (BOTTOM) ---
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
@@ -212,4 +198,4 @@ if uploaded_file:
                     mime="application/pdf"
                 )
         else:
-            st.error("PDF file not found. Ensure your parser.py saves the file to 'output/report.pdf'.")
+            st.error("PDF file not found in 'output/'.")
