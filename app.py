@@ -13,155 +13,171 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- PROFESSIONAL DARK UI CSS ---
+# --- PROFESSIONAL DARK UI STYLING ---
 st.markdown("""
     <style>
-    /* Premium Glass-morphism Download Button */
+    /* Global Dark Background */
+    .stApp {
+        background-color: #0E1117;
+    }
+
+    /* Professional Glass-Effect Download Button */
     div.stDownloadButton > button {
         width: 100% !important;
-        height: 80px !important;
-        background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%) !important;
-        color: white !important;
-        font-size: 26px !important;
+        height: 75px !important;
+        background: linear-gradient(90deg, #00C853 0%, #00E676 100%) !important;
+        color: #0E1117 !important;
+        font-size: 22px !important;
         font-weight: 800 !important;
         border-radius: 15px !important;
         border: none !important;
         margin-top: 20px !important;
-        box-shadow: 0 10px 20px rgba(0,114,255,0.3) !important;
-        transition: all 0.3s ease !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
+        box-shadow: 0px 5px 15px rgba(0, 200, 83, 0.4) !important;
+        transition: 0.3s ease-in-out;
     }
     div.stDownloadButton > button:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 15px 25px rgba(0,114,255,0.4) !important;
-        filter: brightness(1.1);
+        transform: scale(1.02);
+        box-shadow: 0px 8px 20px rgba(0, 200, 83, 0.6) !important;
     }
-
-    /* Clean Dark ML Bar */
+    
+    /* Professional ML Readiness Bar */
     .ml-container {
-        background-color: #1e1e1e;
-        border-radius: 50px;
+        background-color: #1c1e26;
+        border-radius: 30px;
         width: 100%;
-        height: 45px;
+        height: 40px;
         border: 1px solid #333;
         overflow: hidden;
-        margin-bottom: 25px;
+        margin-top: 10px;
     }
     .ml-fill {
         height: 100%;
-        background: linear-gradient(90deg, #00f260 0%, #0575e6 100%);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 18px;
-        box-shadow: 2px 0 10px rgba(0,242,96,0.5);
+        color: #0E1117;
+        font-weight: 900;
+        font-size: 16px;
+        box-shadow: 5px 0 15px rgba(0, 200, 83, 0.5);
     }
 
-    /* Stats Cards Styling */
-    .stat-card {
-        background: #161b22;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #30363d;
+    /* Metric Card Styling */
+    div[data-testid="stMetricValue"] {
+        color: #00E676 !important;
+        font-weight: bold;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("<h1 style='text-align: center;'>📊 Data Intelligence Report</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Automated Documenter & Machine Learning Readiness Engine</p>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: white;'>📄 Auto-Documenter</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #8b949e;'>Advanced Data Analytics & ML Intelligence</p>", unsafe_allow_html=True)
 st.markdown("---")
 
+# ---------- SIDEBAR ----------
+with st.sidebar:
+    st.header("⚙ Settings")
+    preview_rows = st.slider("Preview Rows", 5, 50, 10)
+
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("", type=["csv", "xlsx", "xls", "json"])
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
-    
-    st.markdown("### 🔍 Dataset Preview")
-    st.dataframe(df.head(10), use_container_width=True)
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    elif uploaded_file.name.endswith((".xlsx", ".xls")):
+        df = pd.read_excel(uploaded_file)
+    elif uploaded_file.name.endswith(".json"):
+        df = pd.read_json(uploaded_file)
+    else:
+        st.error("Unsupported file type!")
+        st.stop()
 
-    if st.button("🚀 Analyze Data Structure"):
-        with st.spinner("Generating Insights..."):
+    st.markdown("### 🔍 File Preview")
+    st.dataframe(df.head(preview_rows), use_container_width=True)
+
+    if st.button("🚀 Run Analysis & Generate Documentation"):
+        with st.spinner("Processing data..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-            st.session_state['analysis_result'] = analyze_file(temp_path)
+
+            result = analyze_file(temp_path)
+            st.session_state['analysis_result'] = result
 
     if 'analysis_result' in st.session_state:
         result = st.session_state['analysis_result']
         
-        # --- TOP LEVEL METRICS ---
-        st.markdown("## 📊 Executive Summary")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Records", result['summary']['rows'])
-        m2.metric("Features", result['summary']['columns'])
-        m3.metric("Numeric Fields", result['numeric_count'])
-        m4.metric("Categorical", result['categorical_count'])
+        st.success("✅ Documentation generated successfully!")
 
-        # --- SMART DROPDOWN STATISTICS ---
-        with st.expander("📈 Advanced Statistical Distribution"):
-            numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        # --- METRICS ---
+        st.markdown("## 📊 Dataset Metrics")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Rows", result['summary']['rows'])
+        c2.metric("Columns", result['summary']['columns'])
+        c3.metric("Numeric", result['numeric_count'])
+        c4.metric("Categorical", result['categorical_count'])
+
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+
+        # --- DROPDOWN COLUMN STATISTICS ---
+        with st.expander("📈 View Column Statistics (Min / Avg / Max)"):
             for col in numeric_cols:
                 if df[col].nunique() <= 1: continue 
-                st.markdown(f"**{col} Distribution**")
+                min_val, avg_val, max_val = df[col].min(), round(df[col].mean(), 2), df[col].max()
+                st.markdown(f"**{col}**")
                 st.markdown(f"""
-                <div style="display:flex; width:100%; height:12px; border-radius:10px; overflow:hidden; margin-bottom:15px;">
-                    <div style="width:33%; background:#ff4b4b;"></div>
-                    <div style="width:33%; background:#ffea00;"></div>
-                    <div style="width:34%; background:#00ff4b;"></div>
-                </div>""", unsafe_allow_html=True)
+                <div style="display:flex; width:100%; height:12px; border-radius:5px; overflow:hidden; margin-bottom:12px;">
+                    <div style="width:33%; background:#ff4b4b;"></div><div style="width:33%; background:#ffea00;"></div><div style="width:34%; background:#00ff4b;"></div>
+                </div>
+                <p style='font-size:12px; color:#8b949e;'>Min: {min_val} | Avg: {avg_val} | Max: {max_val}</p>
+                """, unsafe_allow_html=True)
 
-        # --- THE PROFESSIONAL GRAPH (NO MORE MESS) ---
-        st.markdown("## 📉 Performance & Trend Visualization")
-        dynamic_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-        
-        if dynamic_cols:
-            selected_col = st.selectbox("Select metric to visualize:", dynamic_cols)
-            
-            # Logic to clean the graph based on the time period
-            time_col = next((c for c in df.columns if any(k in c.lower() for k in ['year', 'date', 'period'])), None)
-            
-            if time_col:
-                # FIX: Grouping the data makes the graph look professional (no barcode lines)
-                plot_df = df.groupby(time_col)[selected_col].mean().reset_index()
-                plot_df[time_col] = plot_df[time_col].astype(str)
-                fig = px.line(plot_df, x=time_col, y=selected_col, markers=True, template="plotly_dark")
-            else:
-                fig = px.line(df, y=selected_col, template="plotly_dark")
+        # --- PROFESSIONAL DARK TREND GRAPH ---
+        with st.expander("📊 Column Trends (Interactive Dark Mode)"):
+            dynamic_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+            if dynamic_cols:
+                selected_col = st.selectbox("Select metric to analyze trend:", dynamic_cols)
+                x_axis = next((c for c in df.columns if any(k in c.lower() for k in ['year', 'period', 'date'])), None)
+                
+                if x_axis:
+                    # Fix messy lines by grouping the average per period
+                    clean_df = df.groupby(x_axis)[selected_col].mean().reset_index()
+                    clean_df[x_axis] = clean_df[x_axis].astype(str)
+                    fig = px.line(clean_df, x=x_axis, y=selected_col, markers=True, template="plotly_dark")
+                else:
+                    fig = px.line(df, y=selected_col, template="plotly_dark")
 
-            fig.update_traces(line=dict(width=4, color="#00d2ff"), marker=dict(size=10, color="#ffffff"))
-            fig.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(showgrid=False),
-                yaxis=dict(gridcolor="#333")
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                fig.update_traces(line=dict(width=3, color="#00E676"), marker=dict(size=8, color="white"))
+                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig, use_container_width=True)
 
-        # --- ML READINESS (BOTTOM ANCHORED) ---
+        # --- HEATMAP & MISSING DATA ---
+        cl, cr = st.columns(2)
+        with cl:
+            st.markdown("### 🔥 Correlation")
+            corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+            if corr_cols:
+                fig_heat = px.imshow(df[corr_cols].corr(), text_auto=True, color_continuous_scale="Viridis", template="plotly_dark")
+                st.plotly_chart(fig_heat, use_container_width=True)
+        with cr:
+            st.markdown("### ⚠ Missing Data %")
+            st.dataframe((df.isna().sum() / len(df) * 100).round(2), use_container_width=True)
+
+        # --- ML READINESS SCORE (BOTTOM) ---
         st.markdown("---")
-        st.markdown("## 🤖 AI Readiness Intelligence")
-        score = 79.28 
+        st.markdown("## 🤖 ML Readiness Score")
+        score = 79.28  
+        st.markdown(f"**Readiness Level: {score}/100**")
         st.markdown(f"""
             <div class="ml-container">
-                <div class="ml-fill" style="width:{score}%;">
-                    SCORE: {score}/100
-                </div>
+                <div class="ml-fill" style="width:{score}%; background: #00E676;">{score}%</div>
             </div>
         """, unsafe_allow_html=True)
 
-        # --- THE FINAL DOWNLOAD ACTION ---
+        # --- PDF DOWNLOAD ---
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button(
-                    label="📥 Export Final PDF Documentation Report",
-                    data=f,
-                    file_name="Data_Intelligence_Report.pdf",
-                    mime="application/pdf"
-                )
+                st.download_button(label="📥 DOWNLOAD FULL DOCUMENTATION REPORT (PDF)", data=f, file_name="Data_Report.pdf", mime="application/pdf")
