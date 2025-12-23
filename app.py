@@ -3,200 +3,136 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from parser import analyze_file  # your phraiser.py / parser.py
 import os
 
-# ---------------- PAGE CONFIG ----------------
+# ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="📄 Auto-Documenter",
     page_icon="📊",
     layout="wide"
 )
 
+# ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
 st.markdown("Upload a CSV, Excel, or JSON file to generate interactive documentation.")
 st.markdown("---")
 
-# ---------------- SIDEBAR ----------------
+# ---------- SIDEBAR ----------
 with st.sidebar:
     st.header("⚙ Settings")
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
-# ---------------- FILE UPLOAD ----------------
+# ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
-if not uploaded_file:
-    st.stop()
+if uploaded_file:
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+    elif uploaded_file.name.endswith((".xlsx", ".xls")):
+        df = pd.read_excel(uploaded_file)
+    elif uploaded_file.name.endswith(".json"):
+        df = pd.read_json(uploaded_file)
+    else:
+        st.error("Unsupported file type!")
+        st.stop()
 
-# ---------------- LOAD DATA ----------------
-if uploaded_file.name.endswith(".csv"):
-    df = pd.read_csv(uploaded_file)
-elif uploaded_file.name.endswith((".xlsx", ".xls")):
-    df = pd.read_excel(uploaded_file)
-elif uploaded_file.name.endswith(".json"):
-    df = pd.read_json(uploaded_file)
-else:
-    st.error("Unsupported file type")
-    st.stop()
+    st.markdown("## 🔍 File Preview")
+    st.dataframe(df.head(preview_rows), use_container_width=True)
 
-st.markdown("## 🔍 File Preview")
-st.dataframe(df.head(preview_rows), use_container_width=True)
+    # ---------- GENERATE METRICS ----------
+    if st.button("🚀 Generate Documentation"):
+        with st.spinner("Processing file..."):
+            os.makedirs("temp_upload", exist_ok=True)
+            temp_path = os.path.join("temp_upload", uploaded_file.name)
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-# ---------------- HELPERS ----------------
-def detect_date_column(series):
-    s = series.dropna().astype(str)
+            # Call parser
+            result = analyze_file(temp_path)
 
-    if s.str.fullmatch(r"\d{4}").mean() > 0.8:
-        return pd.to_datetime(s, format="%Y", errors="coerce")
+        if "error" in result:
+            st.error(f"Error: {result['error']}")
+            st.stop()
 
-    if s.str.fullmatch(r"\d{4}\.\d{1,2}").mean() > 0.8:
-        return pd.to_datetime(s, format="%Y.%m", errors="coerce")
+        # ---------- DISPLAY METRICS ----------
+        st.success("✅ Documentation generated successfully!")
 
-    if s.str.contains(r"Q").mean() > 0.8:
-        return pd.PeriodIndex(s, freq="Q").to_timestamp()
+        st.markdown("## 📊 Dataset Metrics")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Rows", result['summary']['rows'])
+        c2.metric("Columns", result['summary']['columns'])
+        c3.metric("Numeric Columns", result['numeric_count'])
+        c4.metric("Categorical Columns", result['categorical_count'])
 
-    try:
-        parsed = pd.to_datetime(s, errors="coerce")
-        if parsed.notna().mean() > 0.8:
-            return parsed
-    except:
-        pass
+        # ---------- COLUMN DATATYPES ----------
+        st.markdown("## 📌 Column Datatypes")
+        col_types = pd.Series(df.dtypes).astype(str)
+        type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
+        st.dataframe(type_df, use_container_width=True)
 
-    return None
+        # ---------- NUMERIC & CATEGORICAL ----------
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
-# ---------------- METRICS ----------------
-rows, cols = df.shape
-numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+        # ---------- MIN / AVG / MAX GRADIENT BAR ----------
+        st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
+        for col in numeric_cols:
+            min_val = df[col].min()
+            avg_val = round(df[col].mean(), 2)
+            max_val = df[col].max()
 
-st.markdown("## 📊 Dataset Metrics")
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Rows", rows)
-c2.metric("Columns", cols)
-c3.metric("Numeric", len(numeric_cols))
-c4.metric("Categorical", len(categorical_cols))
+            st.markdown(f"**{col}**")
+            st.markdown(f"""
+            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:20px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
+            </div>
+            <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
+            """, unsafe_allow_html=True)
 
-# ---------------- COLUMN DATATYPES ----------------
-st.markdown("## 📌 Column Datatypes")
-dtype_df = pd.DataFrame({
-    "Column": df.columns,
-    "Data Type": df.dtypes.astype(str)
-})
-st.dataframe(dtype_df, use_container_width=True)
+        # ---------- COLUMN GRAPHS ----------
+        with st.expander("📊 Column Graphs (Interactive)"):
+            for col in numeric_cols:
+                fig = px.line(df, y=col, title=f"{col} Trend")
+                st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- MIN / AVG / MAX ----------------
-st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
-for col in numeric_cols:
-    if df[col].nunique() <= 1:
-        continue
+        # ---------- CORRELATION HEATMAP ----------
+        if len(numeric_cols) > 1:
+            with st.expander("🔥 Correlation Heatmap (Interactive)"):
+                corr = df[numeric_cols].corr().round(2)
+                st.dataframe(corr, use_container_width=True)
+                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+                st.plotly_chart(fig, use_container_width=True)
 
-    mn, av, mx = df[col].min(), round(df[col].mean(), 2), df[col].max()
+        # ---------- WARNINGS ----------
+        st.markdown("## ⚠ Missing Values % per Column")
+        missing_pct = (df.isna().sum() / len(df) * 100).round(2)
+        st.dataframe(missing_pct, use_container_width=True)
 
-    st.markdown(f"**{col}**")
-    st.markdown(f"""
-    <div style="display:flex;height:18px;border-radius:4px;overflow:hidden;">
-        <div style="flex:1;background:#ff4b4b;"></div>
-        <div style="flex:1;background:#ffd700;"></div>
-        <div style="flex:1;background:#00cc66;"></div>
-    </div>
-    <small>Min: {mn} | Avg: {av} | Max: {mx}</small>
-    """, unsafe_allow_html=True)
-
-# ---------------- COLUMN GRAPHS ----------------
-with st.expander("📊 Column Graphs"):
-    for col in numeric_cols:
-        if df[col].nunique() <= 1:
-            continue
-        if df[col].isna().mean() > 0.9:
-            continue
-
-        plot_df = df.copy()
-        x_axis = None
-
-        for c in df.columns:
-            detected = detect_date_column(df[c])
-            if detected is not None:
-                plot_df[c] = detected
-                x_axis = c
-                break
-
-        fig = px.line(
-            plot_df,
-            x=x_axis,
-            y=col,
-            title=f"{col} Trend"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- CORRELATION ----------------
-usable_numeric = [
-    c for c in numeric_cols
-    if df[c].nunique() > 1 and df[c].isna().mean() < 0.9
-]
-
-if len(usable_numeric) > 1:
-    st.markdown("## 🔥 Correlation Analysis")
-    corr = df[usable_numeric].corr().round(2)
-
-    st.dataframe(corr, use_container_width=True)
-
-    fig = px.imshow(
-        corr,
-        color_continuous_scale="RdBu_r",
-        text_auto=True
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ML READINESS ----------------
-missing_pct = df.isna().mean() * 100
-duplicate_pct = df.duplicated().mean() * 100
-
-ml_score = round(
-    (100 - missing_pct.mean()) * 0.4 +
-    (100 - duplicate_pct) * 0.3 +
-    min(len(usable_numeric)/cols, 1) * 100 * 0.3,
-    2
-)
-
-st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-
-st.markdown(f"""
-<div style="background:linear-gradient(to right,#ff4b4b,#ffd700,#00cc66);
-height:26px;border-radius:6px;position:relative;">
-    <div style="position:absolute;left:{ml_score}%;transform:translateX(-50%);
-    font-weight:bold;color:black;">{ml_score}/100</div>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------------- TARGET SUGGESTION ----------------
-target = None
-for col in usable_numeric:
-    if not detect_date_column(df[col]):
-        target = col
-        break
-
-if target:
-    st.markdown(f"**🎯 Suggested Target Variable:** `{target}`")
-
-# ---------------- ML PREVIEW ----------------
-try:
-    from sklearn.linear_model import LinearRegression
-    from sklearn.model_selection import train_test_split
-
-    features = [c for c in usable_numeric if c != target]
-
-    if target and features:
-        X = df[features].fillna(0)
-        y = df[target].fillna(0)
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.25, random_state=42
+        # ---------- ML READINESS SCORE ----------
+        completeness = round(100 - missing_pct.mean(), 2)
+        duplicate_pct = round(df.duplicated().mean() * 100, 2)
+        ml_ready_score = round(
+            (completeness * 0.4) + ((100 - duplicate_pct) * 0.3) +
+            (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
+            2
         )
 
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        score = round(model.score(X_test, y_test), 3)
+        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
+        st.markdown(f"""
+        <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
+                    width:100%; height:25px; border-radius:5px; position:relative;">
+            <div style="position:absolute; left:{ml_ready_score}%; top:0; transform:translateX(-50%);
+                        color:black; font-weight:bold;">{ml_ready_score}/100</div>
+        </div>
+        <div style="margin-top:5px;">
+        Suggested Algorithms:<br>
+        - Regression: Linear Regression, Random Forest Regressor, Gradient Boosting<br>
+        - Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression<br>
+        - Unsupervised: KMeans, DBSCAN, Hierarchical Clustering
+        </div>
+        """, unsafe_allow_html=True)
 
-        st.success(f"🧠 ML Preview: Linear Regression R² = {score}")
-
-except Exception as e:
-    st.warning("⚠ ML preview skipped (scikit-learn not available)")
