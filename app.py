@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from parser import analyze_file  # your phraiser.py / parser.py
+from parser import analyze_file  
 import os
 
 # ---------- PAGE CONFIG ----------
@@ -27,6 +27,7 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
+    # 1. Read the file for the preview
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     elif uploaded_file.name.endswith((".xlsx", ".xls")):
@@ -42,22 +43,42 @@ if uploaded_file:
 
     # ---------- GENERATE METRICS ----------
     if st.button("🚀 Generate Documentation"):
-        with st.spinner("Processing file..."):
+        with st.spinner("Processing file and creating PDF..."):
+            # Ensure temp directory exists
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
+            
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Call parser
+            # Call your parser.py function
             result = analyze_file(temp_path)
 
         if "error" in result:
             st.error(f"Error: {result['error']}")
             st.stop()
 
-        # ---------- DISPLAY METRICS ----------
+        # Save result to session state so it persists after download clicks
+        st.session_state['analysis_result'] = result
         st.success("✅ Documentation generated successfully!")
 
+    # Check if we have results to display
+    if 'analysis_result' in st.session_state:
+        result = st.session_state['analysis_result']
+
+        # ---------- DOWNLOAD SECTION ----------
+        st.markdown("## 📥 Export Report")
+        pdf_path = "output/report.pdf"
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    label="📩 Download Full PDF Report",
+                    data=f,
+                    file_name=f"Documentation_Report_{uploaded_file.name}.pdf",
+                    mime="application/pdf"
+                )
+
+        # ---------- DISPLAY METRICS ----------
         st.markdown("## 📊 Dataset Metrics")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", result['summary']['rows'])
@@ -71,12 +92,11 @@ if uploaded_file:
         type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
         st.dataframe(type_df, use_container_width=True)
 
-        # ---------- NUMERIC & CATEGORICAL ----------
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
         categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
         # ---------- MIN / AVG / MAX GRADIENT BAR ----------
-        st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
+        st.markdown("## 📈 Column Statistics")
         for col in numeric_cols:
             min_val = df[col].min()
             avg_val = round(df[col].mean(), 2)
@@ -92,18 +112,40 @@ if uploaded_file:
             <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
-        # ---------- COLUMN GRAPHS ----------
+        # ---------- FIXED COLUMN GRAPHS ----------
         with st.expander("📊 Column Graphs (Interactive)"):
-            for col in numeric_cols:
-                fig = px.line(df, y=col, title=f"{col} Trend")
+            # FIX 1: Filter out constant columns (like Magnitude)
+            valid_graph_cols = [c for c in numeric_cols if df[c].nunique() > 1]
+            
+            if valid_graph_cols:
+                selected_col = st.selectbox("Select column to view trend:", valid_graph_cols)
+                
+                # FIX 2: Handle Period/Timeline formatting
+                temp_df = df.copy()
+                x_axis = None
+                
+                # If 'Period' or 'Year' exists, use it as X-axis and treat as string to avoid decimal gaps
+                time_cols = [c for c in df.columns if c.lower() in ['period', 'year', 'date']]
+                if time_cols:
+                    x_axis = time_cols[0]
+                    temp_df[x_axis] = temp_df[x_axis].astype(str)
+                
+                fig = px.line(temp_df, x=x_axis, y=selected_col, title=f"{selected_col} Trend")
+                
+                # FIX 3: Clean up Y-axis formatting for years
+                if "year" in selected_col.lower():
+                    fig.update_layout(yaxis=dict(tickformat="d"))
+                
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No variable numeric columns available for graphing.")
 
         # ---------- CORRELATION HEATMAP ----------
         if len(numeric_cols) > 1:
-            with st.expander("🔥 Correlation Heatmap (Interactive)"):
+            with st.expander("🔥 Correlation Heatmap"):
                 corr = df[numeric_cols].corr().round(2)
-                st.dataframe(corr, use_container_width=True)
-                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+                # FIX 4: Handle "None" values visually
+                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
                 st.plotly_chart(fig, use_container_width=True)
 
         # ---------- WARNINGS ----------
@@ -121,18 +163,20 @@ if uploaded_file:
             2
         )
 
-        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
+        st.markdown("## 🤖 ML Readiness Score")
         st.markdown(f"""
-        <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
-                    width:100%; height:25px; border-radius:5px; position:relative;">
-            <div style="position:absolute; left:{ml_ready_score}%; top:0; transform:translateX(-50%);
-                        color:black; font-weight:bold;">{ml_ready_score}/100</div>
-        </div>
-        <div style="margin-top:5px;">
-        Suggested Algorithms:<br>
-        - Regression: Linear Regression, Random Forest Regressor, Gradient Boosting<br>
-        - Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression<br>
-        - Unsupervised: KMeans, DBSCAN, Hierarchical Clustering
+        <div style="background:#e0e0e0; width:100%; height:25px; border-radius:5px;">
+            <div style="background:linear-gradient(to right, #ff4b4b, #00ff4b); 
+                        width:{ml_ready_score}%; height:25px; border-radius:5px; 
+                        display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">
+                {ml_ready_score}/100
+            </div>
         </div>
         """, unsafe_allow_html=True)
-
+        
+        st.markdown("""
+        **Suggested Algorithms:**
+        * **Regression:** Linear Regression, Random Forest Regressor
+        * **Classification:** XGBoost, Random Forest, Logistic Regression
+        * **Unsupervised:** KMeans, DBSCAN
+        """)
