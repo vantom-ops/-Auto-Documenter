@@ -3,9 +3,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from parser import analyze_file
+from parser import analyze_file  # your phraiser.py / parser.py
 import os
-from fpdf import FPDF   # ✅ added
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -27,47 +26,6 @@ with st.sidebar:
 # ---------- FILE UPLOADER ----------
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
-# ---------- PDF FUNCTION (ADDED ONLY) ----------
-def generate_pdf(df, result, numeric_cols, missing_pct, ml_ready_score):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Auto-Documenter Report", ln=True)
-
-    pdf.set_font("Arial", size=11)
-    pdf.ln(4)
-    pdf.cell(0, 8, f"Rows: {result['summary']['rows']}", ln=True)
-    pdf.cell(0, 8, f"Columns: {result['summary']['columns']}", ln=True)
-
-    pdf.ln(4)
-    pdf.cell(0, 8, "Column Datatypes:", ln=True)
-    for col, dtype in df.dtypes.items():
-        pdf.cell(0, 7, f"{col} : {dtype}", ln=True)
-
-    pdf.ln(4)
-    pdf.cell(0, 8, "Min / Avg / Max:", ln=True)
-    for col in numeric_cols:
-        pdf.cell(
-            0, 7,
-            f"{col} → Min:{df[col].min()} Avg:{round(df[col].mean(),2)} Max:{df[col].max()}",
-            ln=True
-        )
-
-    pdf.ln(4)
-    pdf.cell(0, 8, "Missing Values %:", ln=True)
-    for col, val in missing_pct.items():
-        pdf.cell(0, 7, f"{col}: {val}%", ln=True)
-
-    pdf.ln(4)
-    pdf.cell(0, 8, f"ML Readiness Score: {ml_ready_score}/100", ln=True)
-
-    path = "Auto_Documenter_Report.pdf"
-    pdf.output(path)
-    return path
-
-# ---------- MAIN ----------
 if uploaded_file:
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
@@ -82,14 +40,22 @@ if uploaded_file:
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
+    # ---------- GENERATE METRICS ----------
     if st.button("🚀 Generate Documentation"):
         with st.spinner("Processing file..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
+
+            # Call parser
             result = analyze_file(temp_path)
 
+        if "error" in result:
+            st.error(f"Error: {result['error']}")
+            st.stop()
+
+        # ---------- DISPLAY METRICS ----------
         st.success("✅ Documentation generated successfully!")
 
         st.markdown("## 📊 Dataset Metrics")
@@ -99,53 +65,74 @@ if uploaded_file:
         c3.metric("Numeric Columns", result['numeric_count'])
         c4.metric("Categorical Columns", result['categorical_count'])
 
+        # ---------- COLUMN DATATYPES ----------
         st.markdown("## 📌 Column Datatypes")
-        st.dataframe(
-            pd.DataFrame(df.dtypes.astype(str), columns=["Data Type"]),
-            use_container_width=True
-        )
+        col_types = pd.Series(df.dtypes).astype(str)
+        type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
+        st.dataframe(type_df, use_container_width=True)
 
+        # ---------- NUMERIC & CATEGORICAL ----------
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
+        # ---------- MIN / AVG / MAX GRADIENT BAR ----------
         st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
         for col in numeric_cols:
-            st.markdown(f"**{col}**")
-            st.markdown(
-                f"Min: {df[col].min()} | Avg: {round(df[col].mean(),2)} | Max: {df[col].max()}"
-            )
+            min_val = df[col].min()
+            avg_val = round(df[col].mean(), 2)
+            max_val = df[col].max()
 
+            st.markdown(f"**{col}**")
+            st.markdown(f"""
+            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:20px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
+                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
+            </div>
+            <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
+            """, unsafe_allow_html=True)
+
+        # ---------- COLUMN GRAPHS ----------
         with st.expander("📊 Column Graphs (Interactive)"):
             for col in numeric_cols:
-                st.plotly_chart(px.line(df, y=col), use_container_width=True)
+                fig = px.line(df, y=col, title=f"{col} Trend")
+                st.plotly_chart(fig, use_container_width=True)
 
+        # ---------- CORRELATION HEATMAP ----------
         if len(numeric_cols) > 1:
             with st.expander("🔥 Correlation Heatmap (Interactive)"):
-                corr = df[numeric_cols].corr()
-                st.plotly_chart(px.imshow(corr, text_auto=True), use_container_width=True)
+                corr = df[numeric_cols].corr().round(2)
+                st.dataframe(corr, use_container_width=True)
+                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+                st.plotly_chart(fig, use_container_width=True)
 
+        # ---------- WARNINGS ----------
         st.markdown("## ⚠ Missing Values % per Column")
         missing_pct = (df.isna().sum() / len(df) * 100).round(2)
         st.dataframe(missing_pct, use_container_width=True)
 
+        # ---------- ML READINESS SCORE ----------
         completeness = round(100 - missing_pct.mean(), 2)
         duplicate_pct = round(df.duplicated().mean() * 100, 2)
         ml_ready_score = round(
             (completeness * 0.4) + ((100 - duplicate_pct) * 0.3) +
-            (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.3),
+            (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
             2
         )
 
         st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-        st.markdown(f"**ML Readiness Score:** {ml_ready_score}/100")
+        st.markdown(f"""
+        <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
+                    width:100%; height:25px; border-radius:5px; position:relative;">
+            <div style="position:absolute; left:{ml_ready_score}%; top:0; transform:translateX(-50%);
+                        color:black; font-weight:bold;">{ml_ready_score}/100</div>
+        </div>
+        <div style="margin-top:5px;">
+        Suggested Algorithms:<br>
+        - Regression: Linear Regression, Random Forest Regressor, Gradient Boosting<br>
+        - Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression<br>
+        - Unsupervised: KMeans, DBSCAN, Hierarchical Clustering
+        </div>
+        """, unsafe_allow_html=True)
 
-        # ---------- PDF DOWNLOAD (ONLY ADDITION) ----------
-        if st.button("📄 Download PDF Report", use_container_width=True):
-            pdf_path = generate_pdf(df, result, numeric_cols, missing_pct, ml_ready_score)
-            with open(pdf_path, "rb") as f:
-                st.download_button(
-                    "⬇ Click to Download",
-                    f,
-                    file_name="Auto_Documenter_Report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
