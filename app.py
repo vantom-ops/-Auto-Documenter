@@ -2,136 +2,191 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-from parser import analyze_file  # your phraiser.py / parser.py
-import os
 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="📄 Auto-Documenter",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Auto Data Analyzer", layout="wide")
 
-# ---------- HEADER ----------
-st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload a CSV, Excel, or JSON file to generate interactive documentation.")
-st.markdown("---")
+st.title("📊 Auto Dataset Analyzer")
 
-# ---------- SIDEBAR ----------
-with st.sidebar:
-    st.header("⚙ Settings")
-    preview_rows = st.slider("Preview Rows", 5, 50, 10)
+# -------------------------
+# Helper Functions
+# -------------------------
 
-# ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
+def convert_year_month(col):
+    try:
+        s = col.astype(str)
+        if s.str.match(r"^\d{4}\.\d{1,2}$").all():
+            return pd.to_datetime(s, format="%Y.%m")
+    except:
+        pass
+    return col
 
-if uploaded_file:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith(".json"):
-        df = pd.read_json(uploaded_file)
+
+def ml_readiness_score(df):
+    score = 0
+    notes = []
+
+    if len(df) >= 100:
+        score += 25
     else:
-        st.error("Unsupported file type!")
-        st.stop()
+        notes.append("Dataset is small")
 
-    st.markdown("## 🔍 File Preview")
-    st.dataframe(df.head(preview_rows), use_container_width=True)
+    missing_ratio = df.isna().mean().mean()
+    if missing_ratio < 0.1:
+        score += 25
+    else:
+        notes.append("High missing values")
 
-    # ---------- GENERATE METRICS ----------
-    if st.button("🚀 Generate Documentation"):
-        with st.spinner("Processing file..."):
-            os.makedirs("temp_upload", exist_ok=True)
-            temp_path = os.path.join("temp_upload", uploaded_file.name)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+    numeric_cols = df.select_dtypes(include=np.number).columns
+    if len(numeric_cols) >= 3:
+        score += 25
+    else:
+        notes.append("Few numeric features")
 
-            # Call parser
-            result = analyze_file(temp_path)
+    if df.duplicated().sum() == 0:
+        score += 25
+    else:
+        notes.append("Duplicate rows found")
 
-        if "error" in result:
-            st.error(f"Error: {result['error']}")
-            st.stop()
+    return score, notes
 
-        # ---------- DISPLAY METRICS ----------
-        st.success("✅ Documentation generated successfully!")
 
-        st.markdown("## 📊 Dataset Metrics")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", result['summary']['rows'])
-        c2.metric("Columns", result['summary']['columns'])
-        c3.metric("Numeric Columns", result['numeric_count'])
-        c4.metric("Categorical Columns", result['categorical_count'])
+def suggest_algorithms(df):
+    numeric_cols = df.select_dtypes(include=np.number).columns
+    cat_cols = df.select_dtypes(include="object").columns
 
-        # ---------- COLUMN DATATYPES ----------
-        st.markdown("## 📌 Column Datatypes")
-        col_types = pd.Series(df.dtypes).astype(str)
-        type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
-        st.dataframe(type_df, use_container_width=True)
+    algos = []
+    if len(numeric_cols) >= 3:
+        algos.extend(["Linear Regression", "Random Forest", "XGBoost"])
+    if len(cat_cols) > 0:
+        algos.append("Decision Tree")
+    if len(df) > 500:
+        algos.append("Neural Network")
 
-        # ---------- NUMERIC & CATEGORICAL ----------
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+    return list(set(algos))
 
-        # ---------- MIN / AVG / MAX GRADIENT BAR ----------
-        st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
-        for col in numeric_cols:
-            min_val = df[col].min()
-            avg_val = round(df[col].mean(), 2)
-            max_val = df[col].max()
 
-            st.markdown(f"**{col}**")
-            st.markdown(f"""
-            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:20px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
-            </div>
-            <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
-            """, unsafe_allow_html=True)
+# -------------------------
+# File Upload
+# -------------------------
 
-        # ---------- COLUMN GRAPHS ----------
-        with st.expander("📊 Column Graphs (Interactive)"):
-            for col in numeric_cols:
-                fig = px.line(df, y=col, title=f"{col} Trend")
-                st.plotly_chart(fig, use_container_width=True)
+file = st.file_uploader("Upload CSV file", type=["csv"])
 
-        # ---------- CORRELATION HEATMAP ----------
-        if len(numeric_cols) > 1:
-            with st.expander("🔥 Correlation Heatmap (Interactive)"):
-                corr = df[numeric_cols].corr().round(2)
-                st.dataframe(corr, use_container_width=True)
-                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-                st.plotly_chart(fig, use_container_width=True)
+if file:
+    df = pd.read_csv(file)
 
-        # ---------- WARNINGS ----------
-        st.markdown("## ⚠ Missing Values % per Column")
-        missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-        st.dataframe(missing_pct, use_container_width=True)
+    # Convert YYYY.MM floats to datetime
+    for c in df.columns:
+        if pd.api.types.is_float_dtype(df[c]):
+            df[c] = convert_year_month(df[c])
 
-        # ---------- ML READINESS SCORE ----------
-        completeness = round(100 - missing_pct.mean(), 2)
-        duplicate_pct = round(df.duplicated().mean() * 100, 2)
-        ml_ready_score = round(
-            (completeness * 0.4) + ((100 - duplicate_pct) * 0.3) +
-            (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
-            (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
-            2
-        )
+    st.success("File loaded successfully")
 
-        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-        st.markdown(f"""
-        <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
-                    width:100%; height:25px; border-radius:5px; position:relative;">
-            <div style="position:absolute; left:{ml_ready_score}%; top:0; transform:translateX(-50%);
-                        color:black; font-weight:bold;">{ml_ready_score}/100</div>
-        </div>
-        <div style="margin-top:5px;">
-        Suggested Algorithms:<br>
-        - Regression: Linear Regression, Random Forest Regressor, Gradient Boosting<br>
-        - Classification: Decision Tree, Random Forest, XGBoost, Logistic Regression<br>
-        - Unsupervised: KMeans, DBSCAN, Hierarchical Clustering
-        </div>
-        """, unsafe_allow_html=True)
+    # -------------------------
+    # Column Datatypes
+    # -------------------------
+
+    st.subheader("🧱 Column Datatypes")
+
+    dtype_df = pd.DataFrame({
+        "Column": df.columns,
+        "Data Type": [str(df[c].dtype) for c in df.columns]
+    })
+
+    st.dataframe(dtype_df, use_container_width=True)
+
+    # -------------------------
+    # Dataset Metrics
+    # -------------------------
+
+    st.subheader("📌 Dataset Metrics")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Rows", df.shape[0])
+    col2.metric("Columns", df.shape[1])
+    col3.metric("Missing %", f"{df.isna().mean().mean()*100:.2f}%")
+
+    # -------------------------
+    # Numeric Column Selection
+    # -------------------------
+
+    numeric_cols = [
+        c for c in df.select_dtypes(include=np.number).columns
+        if df[c].nunique(dropna=True) > 1 and df[c].isna().mean() < 0.9
+    ]
+
+    # -------------------------
+    # Min / Max / Avg Section
+    # -------------------------
+
+    st.subheader("📈 Min / Max / Avg (Numeric Columns)")
+
+    for col in numeric_cols:
+        min_val = float(df[col].min())
+        max_val = float(df[col].max())
+        avg_val = float(df[col].mean())
+
+        st.markdown(f"**{col}**")
+        st.write(f"Min: {min_val} | Max: {max_val} | Avg: {avg_val}")
+
+        bar_range = max_val - min_val if max_val != min_val else 1
+
+        st.progress((avg_val - min_val) / bar_range)
+
+    # -------------------------
+    # Column Graphs
+    # -------------------------
+
+    st.subheader("📊 Column Graphs")
+
+    selected_col = st.selectbox("Select a numeric column", numeric_cols)
+
+    fig_line = px.line(df, y=selected_col, title=f"{selected_col} Trend")
+    st.plotly_chart(fig_line, use_container_width=True)
+
+    # -------------------------
+    # Correlation Section
+    # -------------------------
+
+    st.subheader("🔥 Correlation Analysis")
+
+    corr = df[numeric_cols].corr()
+    corr_clean = corr.fillna(0)
+
+    fig_heat = px.imshow(
+        corr_clean,
+        text_auto=True,
+        color_continuous_scale="RdBu_r",
+        title="Correlation Heatmap"
+    )
+
+    st.plotly_chart(fig_heat, use_container_width=True)
+    st.dataframe(corr, use_container_width=True)
+
+    # -------------------------
+    # ML Readiness
+    # -------------------------
+
+    st.subheader("🤖 ML Readiness Score")
+
+    score, notes = ml_readiness_score(df)
+
+    st.markdown(f"### Score: {score} / 100")
+
+    st.progress(score / 100)
+
+    if notes:
+        st.warning("⚠ Issues:")
+        for n in notes:
+            st.write("-", n)
+    else:
+        st.success("Dataset is ML-ready")
+
+    # -------------------------
+    # Algorithm Suggestions
+    # -------------------------
+
+    st.subheader("🧠 Suggested ML Algorithms")
+
+    algos = suggest_algorithms(df)
+    for a in algos:
+        st.write("•", a)
