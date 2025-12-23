@@ -25,7 +25,7 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
 
 # ---------- HELPERS ----------
-def convert_year_month(series):
+def fix_year_month(series):
     try:
         s = series.astype(str)
         if s.str.match(r"^\d{4}\.\d{1,2}$").all():
@@ -42,13 +42,13 @@ if uploaded_file:
     elif uploaded_file.name.endswith(".json"):
         df = pd.read_json(uploaded_file)
     else:
-        st.error("Unsupported file type!")
+        st.error("Unsupported file type")
         st.stop()
 
-    # ---------- FIX YYYY.MM ----------
+    # Fix YYYY.MM columns
     for col in df.columns:
         if pd.api.types.is_float_dtype(df[col]):
-            df[col] = convert_year_month(df[col])
+            df[col] = fix_year_month(df[col])
 
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
@@ -59,16 +59,11 @@ if uploaded_file:
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-
-            result = analyze_file(temp_path)
-
-        if "error" in result:
-            st.error(result["error"])
-            st.stop()
+            analyze_file(temp_path)
 
         st.success("✅ Documentation generated successfully!")
 
-        # ---------- METRICS ----------
+        # ---------- DATASET METRICS ----------
         st.markdown("## 📊 Dataset Metrics")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", df.shape[0])
@@ -76,52 +71,49 @@ if uploaded_file:
         c3.metric("Numeric Columns", df.select_dtypes(include=np.number).shape[1])
         c4.metric("Categorical Columns", df.select_dtypes(exclude=np.number).shape[1])
 
-        # ---------- DATATYPES ----------
+        # ---------- COLUMN DATATYPES ----------
         st.markdown("## 📌 Column Datatypes")
-        type_df = pd.DataFrame({
-            "Column": df.columns,
-            "Data Type": df.dtypes.astype(str)
-        })
-        st.dataframe(type_df, use_container_width=True)
+        st.dataframe(
+            pd.DataFrame({
+                "Column": df.columns,
+                "Data Type": df.dtypes.astype(str)
+            }),
+            use_container_width=True
+        )
 
-        # ---------- FILTER BAD COLUMNS ----------
-        numeric_cols = [
-            c for c in df.select_dtypes(include=np.number).columns
-            if df[c].nunique(dropna=True) > 1 and df[c].isna().mean() < 0.9
-        ]
-
-        categorical_cols = [
-            c for c in df.select_dtypes(exclude=np.number).columns
-            if df[c].isna().mean() < 0.9
-        ]
+        # ---------- VALID NUMERIC COLUMNS ----------
+        numeric_cols = []
+        for col in df.select_dtypes(include=np.number).columns:
+            if df[col].isna().mean() < 0.9 and df[col].nunique(dropna=True) > 1:
+                numeric_cols.append(col)
 
         # ---------- MIN / AVG / MAX ----------
-        st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
+        st.markdown("## 📈 Min / Avg / Max (All Numeric Columns)")
         for col in numeric_cols:
-            min_val = round(df[col].min(), 2)
-            avg_val = round(df[col].mean(), 2)
-            max_val = round(df[col].max(), 2)
+            min_val = round(df[col].min(), 3)
+            avg_val = round(df[col].mean(), 3)
+            max_val = round(df[col].max(), 3)
 
             st.markdown(f"**{col}**")
             st.markdown(f"""
-            <div style="display:flex; gap:6px; margin-bottom:4px;">
-                <div style="flex:1; background:#ff4b4b; height:18px;"></div>
-                <div style="flex:1; background:#ffd700; height:18px;"></div>
-                <div style="flex:1; background:#00cc66; height:18px;"></div>
+            <div style="display:flex; gap:6px;">
+                <div style="flex:1; height:18px; background:#ff4b4b;"></div>
+                <div style="flex:1; height:18px; background:#ffd700;"></div>
+                <div style="flex:1; height:18px; background:#00cc66;"></div>
             </div>
-            <div style="margin-bottom:12px;">
+            <div style="margin-bottom:10px;">
                 Min: {min_val} | Avg: {avg_val} | Max: {max_val}
             </div>
             """, unsafe_allow_html=True)
 
-        # ---------- GRAPHS ----------
+        # ---------- COLUMN GRAPHS ----------
         with st.expander("📊 Column Graphs (Interactive)"):
             for col in numeric_cols:
                 fig = px.line(df, y=col, title=f"{col} Trend")
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ---------- CORRELATION ----------
-        if len(numeric_cols) > 1:
+        # ---------- CORRELATION HEATMAP ----------
+        if len(numeric_cols) >= 2:
             with st.expander("🔥 Correlation Heatmap (Interactive)"):
                 corr = df[numeric_cols].corr().round(2)
                 st.dataframe(corr, use_container_width=True)
@@ -132,20 +124,15 @@ if uploaded_file:
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ---------- MISSING VALUES ----------
-        st.markdown("## ⚠ Missing Values % per Column")
-        missing_pct = (df.isna().mean() * 100).round(2)
-        st.dataframe(missing_pct, use_container_width=True)
-
         # ---------- ML READINESS ----------
+        missing_pct = df.isna().mean() * 100
         completeness = 100 - missing_pct.mean()
         duplicate_pct = df.duplicated().mean() * 100
 
-        ml_ready_score = round(
+        ml_score = round(
             completeness * 0.4 +
             (100 - duplicate_pct) * 0.3 +
-            min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15 +
-            min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15,
+            min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.3,
             2
         )
 
@@ -153,17 +140,17 @@ if uploaded_file:
         st.markdown(f"""
         <div style="background:linear-gradient(to right,#ff4b4b,#ffd700,#00cc66);
                     height:28px; border-radius:6px; position:relative;">
-            <div style="position:absolute; left:{ml_ready_score}%;
+            <div style="position:absolute; left:{ml_score}%;
                         transform:translateX(-50%);
-                        font-weight:bold; color:black;">
-                {ml_ready_score}/100
+                        font-weight:bold;">
+                {ml_score}/100
             </div>
         </div>
 
         <div style="margin-top:8px;">
-        <b>Suggested Algorithms:</b><br>
-        • Regression → Linear Regression, Random Forest, Gradient Boosting<br>
-        • Classification → Logistic Regression, Random Forest, XGBoost<br>
-        • Unsupervised → KMeans, DBSCAN
+        <b>Suggested Algorithms</b><br>
+        Regression → Linear, Random Forest, XGBoost<br>
+        Classification → Logistic, Random Forest<br>
+        Clustering → KMeans, DBSCAN
         </div>
         """, unsafe_allow_html=True)
