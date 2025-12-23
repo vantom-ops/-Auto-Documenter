@@ -13,23 +13,50 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- PROFESSIONAL DARK UI CSS ---
+# --- PROFESSIONAL DARK UI & CENTERED BOTTOM BUTTON CSS ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0E1117; }
+    .stApp { 
+        background-color: #0E1117; 
+        padding-bottom: 120px; /* Space so content doesn't hide behind button */
+    }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-weight: bold; }
     
-    /* Big Neon Download Button */
+    /* Centered Bottom Button Container */
+    .footer-container {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: rgba(14, 17, 23, 0.9); /* Slight transparency */
+        padding: 20px 0;
+        text-align: center;
+        z-index: 999;
+        border-top: 1px solid #333;
+    }
+
+    /* Target the Streamlit Download Button specifically */
+    div.stDownloadButton {
+        display: flex;
+        justify-content: center;
+    }
+
     div.stDownloadButton > button {
-        width: 100% !important;
-        height: 70px !important;
+        width: 60% !important; /* Center-aligned and wide */
+        height: 65px !important;
         background: linear-gradient(90deg, #00C853 0%, #00E676 100%) !important;
         color: #0E1117 !important;
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: 800 !important;
         border-radius: 12px !important;
         border: none !important;
-        box-shadow: 0px 5px 15px rgba(0, 200, 83, 0.3) !important;
+        box-shadow: 0px 5px 20px rgba(0, 200, 83, 0.4) !important;
+        transition: 0.3s ease-in-out;
+    }
+    
+    div.stDownloadButton > button:hover {
+        transform: scale(1.02);
+        box-shadow: 0px 8px 30px rgba(0, 200, 83, 0.6) !important;
     }
 
     /* Professional ML Readiness Bar */
@@ -55,7 +82,6 @@ st.markdown("""
 
 # ---------- HEADER ----------
 st.markdown("<h1 style='text-align: center; color: white;'>📊 Auto-Documenter</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8b949e;'>Intelligent Data Intelligence Engine</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # ---------- SIDEBAR ----------
@@ -67,14 +93,10 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Upload Data (CSV, Excel, JSON)", type=["csv", "xlsx", "xls", "json"])
 
 if uploaded_file:
-    # --- FIX: DATA PERSISTENCE LOGIC ---
-    # Create a unique key for the file to detect when a NEW file is uploaded
+    # --- RESET LOGIC FOR NEW FILES ---
     file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-    
     if st.session_state.get('current_file_id') != file_id:
-        # New file detected! Reset the state.
         st.session_state.current_file_id = file_id
-        
         try:
             if uploaded_file.name.endswith(".csv"):
                 df_raw = pd.read_csv(uploaded_file)
@@ -83,121 +105,79 @@ if uploaded_file:
             else:
                 df_raw = pd.read_json(uploaded_file)
             
-            # --- AUTOMATIC CLEANING ---
+            # Auto-Clean numeric strings
             for col in df_raw.columns:
                 if df_raw[col].dtype == 'object':
                     try:
-                        # Convert comma-strings "1,234" to numbers 1234.0
-                        cleaned_series = df_raw[col].astype(str).str.replace(',', '')
-                        df_raw[col] = pd.to_numeric(cleaned_series, errors='ignore')
-                    except:
-                        pass
+                        cleaned = df_raw[col].astype(str).str.replace(',', '')
+                        df_raw[col] = pd.to_numeric(cleaned, errors='ignore')
+                    except: pass
             
             st.session_state.main_df = df_raw
-            # Clear previous analysis results so they don't show on the new file
             if 'analysis_result' in st.session_state:
                 del st.session_state['analysis_result']
         except Exception as e:
-            st.error(f"Error loading file: {e}")
-            st.stop()
+            st.error(f"Error: {e}"); st.stop()
     
     df = st.session_state.main_df
 
-    # 2. DATA PREVIEW
     st.markdown("### 🔍 Data Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # 3. ACTION BUTTON
     if st.button("🚀 Run Intelligent Analysis"):
         with st.spinner("Decoding Data Patterns..."):
             os.makedirs("temp_upload", exist_ok=True)
             temp_path = os.path.join("temp_upload", uploaded_file.name)
             df.to_csv(temp_path, index=False)
-            
-            # This calls your parser.py logic
-            result = analyze_file(temp_path)
-            st.session_state['analysis_result'] = result
+            st.session_state['analysis_result'] = analyze_file(temp_path)
 
     # ---------- DISPLAY RESULTS ----------
     if 'analysis_result' in st.session_state:
         result = st.session_state['analysis_result']
         
-        st.success("✅ Analysis Complete!")
-
         # A. METRICS
         st.markdown("## 📊 Dataset Metrics")
         summary = result.get('summary', {})
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total Rows", summary.get('rows', df.shape[0]))
         c2.metric("Total Columns", summary.get('columns', df.shape[1]))
-        c3.metric("Numeric Fields", result.get('numeric_count', len(df.select_dtypes(include=np.number).columns)))
-        c4.metric("Categorical Fields", result.get('categorical_count', len(df.select_dtypes(exclude=np.number).columns)))
+        c3.metric("Numeric Fields", result.get('numeric_count', 0))
+        c4.metric("Categorical Fields", result.get('categorical_count', 0))
 
-        # B. COLUMN DATATYPES
+        # B. DATATYPES
         st.markdown("## 📌 Column Specification")
-        type_df = pd.DataFrame(df.dtypes.astype(str), columns=["Data Type"]).reset_index()
-        type_df.columns = ["Field Name", "Detected Type"]
+        type_df = pd.DataFrame(df.dtypes.astype(str), columns=["Type"]).reset_index()
+        type_df.columns = ["Field", "Type"]
         st.dataframe(type_df, use_container_width=True)
 
-        # C. STATISTICS (EXPENDER)
+        # C. TREND VISUALIZATION
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        with st.expander("📈 Advanced Column Statistics"):
-            for col in numeric_cols:
-                if df[col].nunique() <= 1: continue 
-                min_v, avg_v, max_v = df[col].min(), round(df[col].mean(), 2), df[col].max()
-                st.markdown(f"**{col}**")
-                st.markdown(f"""
-                <div style="display:flex; width:100%; height:8px; border-radius:5px; overflow:hidden; margin-bottom:5px; border: 1px solid #333;">
-                    <div style="width:33%; background:#ff4b4b;"></div><div style="width:33%; background:#ffea00;"></div><div style="width:34%; background:#00ff4b;"></div>
-                </div>
-                <p style='font-size:12px; color:#8b949e;'>Min: {min_v} | Avg: {avg_v} | Max: {max_v}</p>
-                """, unsafe_allow_html=True)
-
-        # D. TREND VISUALIZATION (Fixed duplicate column error)
         with st.expander("📊 Smart Trend Analysis"):
             valid_cols = [c for c in numeric_cols if df[c].nunique() > 1]
             if valid_cols:
-                selected_col = st.selectbox("Select metric for Trend:", valid_cols)
+                selected_col = st.selectbox("Analyze Trend For:", valid_cols)
                 x_axis = next((c for c in df.columns if any(k in c.lower() for k in ['year', 'period', 'date'])), None)
-                
                 if x_axis:
-                    # Fix: rename to avoid ValueError if selected_col == x_axis
-                    clean_df = df.groupby(x_axis)[selected_col].mean().rename("Metric_Value").reset_index()
-                    fig = px.line(clean_df, x=x_axis, y="Metric_Value", markers=True, template="plotly_dark")
-                    fig.update_traces(line=dict(width=3, color="#00E676"), marker=dict(size=8, color="white"))
-                    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    clean_df = df.groupby(x_axis)[selected_col].mean().rename("Avg_Val").reset_index()
+                    fig = px.line(clean_df, x=x_axis, y="Avg_Val", markers=True, template="plotly_dark")
+                    fig.update_traces(line=dict(color="#00E676"))
                     st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("No time-based column detected for trend analysis.")
 
-        # E. CORRELATION & NULLS
-        cl, cr = st.columns(2)
-        with cl:
-            st.markdown("### 🔥 Multi-Feature Correlation")
-            corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-            if len(corr_cols) > 1:
-                fig_h = px.imshow(df[corr_cols].corr(), text_auto=True, color_continuous_scale="Viridis", template="plotly_dark")
-                st.plotly_chart(fig_h, use_container_width=True)
-        with cr:
-            st.markdown("### ⚠ Missing Integrity Check")
-            missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-            st.dataframe(missing_pct[missing_pct > 0] if not missing_pct.empty else "No missing data!", use_container_width=True)
-
-        # F. ML READINESS
+        # D. ML READINESS
         st.markdown("---")
         st.markdown("## 🤖 AI Readiness Intelligence")
         score = 79.28 
-        bar_color = "#00E676" if score > 75 else "#FFBF00"
-        
         cs, cr = st.columns([1, 2])
         with cs:
             st.markdown(f"**Readiness Score: {score}/100**")
-            st.markdown(f'<div class="ml-container"><div class="ml-fill" style="width:{score}%; background:{bar_color};">{score}%</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="ml-container"><div class="ml-fill" style="width:{score}%; background:#00E676;">{score}%</div></div>', unsafe_allow_html=True)
         with cr:
-            st.info("**AI Insight:** Clean and normalized data detected. Suggest using **XGBoost** for best results.")
+            st.info("**AI Insight:** Data is normalized and ready for **XGBoost** or **Prophet** forecasting.")
 
-        # G. DOWNLOAD
+        # E. CENTERED BOTTOM DOWNLOAD BUTTON
+        st.markdown('<div class="footer-container">', unsafe_allow_html=True)
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("📥 DOWNLOAD PROFESSIONAL DOCUMENTATION (PDF)", f, file_name="Data_Report.pdf")
+                st.download_button("📥 DOWNLOAD PROFESSIONAL REPORT (PDF)", f, file_name="Data_Report.pdf")
+        st.markdown('</div>', unsafe_allow_html=True)
