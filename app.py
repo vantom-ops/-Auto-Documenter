@@ -3,8 +3,15 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from parser import analyze_file  # your phraiser.py / parser.py
+from parser import analyze_file
 import os
+from datetime import datetime
+
+# PDF watermark (added safely)
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from io import BytesIO
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -13,53 +20,58 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS FOR TRANSPARENT HORIZONTAL BUTTON & PC VISIBILITY ---
+# ---------- CSS ----------
 st.markdown("""
-    <style>
-    .main .block-container {
-        padding-bottom: 200px !important;
-    }
-    
-    /* Centered Fixed Footer Wrapper */
+<style>
+.main .block-container {
+    padding-bottom: 220px !important;
+}
+
+/* Footer */
+.footer-container {
+    position: fixed !important;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: rgba(14, 17, 23, 0.95);
+    padding: 25px 0;
+    text-align: center;
+    z-index: 999999;
+    border-top: 1px solid rgba(255, 75, 75, 0.4);
+}
+
+/* Hide footer on mobile */
+@media (max-width: 768px) {
     .footer-container {
-        position: fixed !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        width: 100% !important;
-        background-color: rgba(14, 17, 23, 0.9) !important; 
-        padding: 25px 0 !important;
-        text-align: center !important;
-        z-index: 999999 !important;
-        border-top: 1px solid rgba(255, 75, 75, 0.4);
+        display: none !important;
     }
+}
 
-    /* Horizontal Transparent Button */
-    div.stDownloadButton {
-        display: flex !important;
-        justify-content: center !important;
-    }
+/* Download button */
+div.stDownloadButton {
+    display: flex !important;
+    justify-content: center !important;
+}
 
-    div.stDownloadButton > button {
-        width: 85% !important; /* Wide horizontal layout */
-        height: 70px !important;
-        background-color: transparent !important;
-        color: #ff4b4b !important;
-        font-size: 20px !important;
-        font-weight: 800 !important;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        border: 2px solid #ff4b4b !important;
-        border-radius: 12px !important;
-        transition: 0.3s;
-    }
-    
-    div.stDownloadButton > button:hover {
-        background-color: rgba(255, 75, 75, 0.15) !important;
-        border-color: white !important;
-        color: white !important;
-        box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
-    }
-    </style>
+div.stDownloadButton > button {
+    width: 92% !important;
+    height: 80px !important;
+    background-color: transparent !important;
+    color: #ff4b4b !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+    letter-spacing: 2.5px;
+    border: 2px solid #ff4b4b !important;
+    border-radius: 14px !important;
+    transition: 0.3s;
+}
+
+div.stDownloadButton > button:hover {
+    background-color: rgba(255, 75, 75, 0.15) !important;
+    color: white !important;
+    box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ---------- HEADER ----------
@@ -89,7 +101,7 @@ if uploaded_file:
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- GENERATE METRICS ----------
+    # ---------- GENERATE ----------
     if st.button("🚀 Generate Documentation"):
         with st.spinner("Processing file..."):
             os.makedirs("temp_upload", exist_ok=True)
@@ -97,7 +109,6 @@ if uploaded_file:
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Call parser
             result = analyze_file(temp_path)
             st.session_state['analysis_result'] = result
             st.rerun()
@@ -106,84 +117,78 @@ if uploaded_file:
         result = st.session_state['analysis_result']
 
         if "error" in result:
-            st.error(f"Error: {result['error']}")
+            st.error(result["error"])
             st.stop()
 
-        # ---------- DISPLAY METRICS ----------
         st.success("✅ Documentation generated successfully!")
-        st.markdown("## 📊 Dataset Metrics")
+
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", result['summary']['rows'])
         c2.metric("Columns", result['summary']['columns'])
         c3.metric("Numeric Columns", result['numeric_count'])
         c4.metric("Categorical Columns", result['categorical_count'])
 
-        # ---------- COLUMN DATATYPES ----------
-        st.markdown("## 📌 Column Datatypes")
-        col_types = pd.Series(df.dtypes).astype(str)
-        type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
-        st.dataframe(type_df, use_container_width=True)
-
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
-        # ---------- MIN / AVG / MAX GRADIENT BAR ----------
-        st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
-        for col in numeric_cols:
-            min_val = df[col].min()
-            avg_val = round(df[col].mean(), 2)
-            max_val = df[col].max()
-            st.markdown(f"**{col}**")
-            st.markdown(f"""
-            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                <div style="flex:1; background:linear-gradient(to right, #ff4b4b, #ff9999); height:20px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
-                <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
-            </div>
-            <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
-            """, unsafe_allow_html=True)
-
-        # ---------- COLUMN GRAPHS ----------
-        with st.expander("📊 Column Graphs (Interactive)"):
-            for col in numeric_cols:
-                fig = px.line(df, y=col, title=f"{col} Trend")
-                st.plotly_chart(fig, use_container_width=True)
-
-        # ---------- CORRELATION HEATMAP (RESTORED) ----------
         if len(numeric_cols) > 1:
-            with st.expander("🔥 Correlation Heatmap (Interactive)", expanded=True):
-                corr = df[numeric_cols].corr().round(2)
-                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
-                st.plotly_chart(fig, use_container_width=True)
+            corr = df[numeric_cols].corr()
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ---------- WARNINGS ----------
-        st.markdown("## ⚠ Missing Values % per Column")
-        missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-        st.dataframe(missing_pct, use_container_width=True)
+# ---------- PDF WATERMARK (ADD-ON ONLY) ----------
+def add_watermark(input_pdf, output_pdf):
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
 
-        # ---------- ML READINESS SCORE ----------
-        completeness = round(100 - missing_pct.mean(), 2)
-        duplicate_pct = round(df.duplicated().mean() * 100, 2)
-        ml_ready_score = round((completeness * 0.4) + ((100 - duplicate_pct) * 0.3) + (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) + (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15), 2)
+    packet = BytesIO()
+    c = canvas.Canvas(packet, pagesize=A4)
+    c.setFont("Helvetica-Bold", 36)
+    c.setFillGray(0.85, 0.3)
+    c.saveState()
+    c.translate(300, 400)
+    c.rotate(45)
+    c.drawCentredString(0, 0, "AUTO-DOCUMENTER")
+    c.restoreState()
+    c.save()
 
-        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
-        st.markdown(f"""
-        <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
-                    width:100%; height:25px; border-radius:5px; position:relative;">
-            <div style="position:absolute; left:{ml_ready_score}%; top:0; transform:translateX(-50%);
-                        color:black; font-weight:bold;">{ml_ready_score}/100</div>
-        </div>
-        """, unsafe_allow_html=True)
+    packet.seek(0)
+    watermark = PdfReader(packet).pages[0]
 
-        # ---------- DOWNLOAD BUTTON (TRANSPARENT & HORIZONTAL) ----------
-        pdf_path = "output/report.pdf" 
-        if os.path.exists(pdf_path):
-            st.markdown('<div class="footer-container">', unsafe_allow_html=True)
-            with open(pdf_path, "rb") as f:
-                st.download_button(
-                    label="📥 DOWNLOAD PDF REPORT",
-                    data=f,
-                    file_name="Documentation_Report.pdf",
-                    mime="application/pdf"
-                )
-            st.markdown('</div>', unsafe_allow_html=True)
+    for page in reader.pages:
+        page.merge_page(watermark)
+        writer.add_page(page)
+
+    with open(output_pdf, "wb") as f:
+        writer.write(f)
+
+# ---------- FOOTER ----------
+pdf_path = "output/report.pdf"
+watermarked_pdf = "output/report_watermarked.pdf"
+
+if os.path.exists(pdf_path):
+    add_watermark(pdf_path, watermarked_pdf)
+
+    year = datetime.now().year
+
+    st.markdown('<div class="footer-container">', unsafe_allow_html=True)
+
+    with open(watermarked_pdf, "rb") as f:
+        st.download_button(
+            "📥 DOWNLOAD PDF REPORT",
+            f,
+            "Documentation_Report.pdf",
+            "application/pdf"
+        )
+
+    st.markdown(f"""
+    <div style="margin-top:18px; font-size:13px; color:#bbbbbb; line-height:1.6;">
+        © {year} Auto-Documenter<br>
+        Apache License – Version 2.0, January 2004<br>
+        <a href="http://www.apache.org/licenses/" target="_blank" style="color:#ff4b4b;">Apache License</a><br>
+        <a href="https://github.com/your-username/auto-documenter" target="_blank" style="color:#ff4b4b;">
+            GitHub Repository
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
