@@ -88,7 +88,7 @@ with st.sidebar:
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"])
+uploaded_file = st.file_uploader("Choose a file", type=["[csv", "xlsx]"])
 
 if uploaded_file:
     # --- LOAD DATA WITH ENGINE FIX ---
@@ -245,4 +245,5 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
+
 
