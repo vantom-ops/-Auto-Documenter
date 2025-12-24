@@ -83,15 +83,21 @@ with st.sidebar:
 uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"])
 
 if uploaded_file:
+    # --- LOAD DATA WITH ENGINE FIX ---
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith(".json"):
-        df = pd.read_json(uploaded_file)
+    elif uploaded_file.name.endswith(".xlsx"):
+        df = pd.read_excel(uploaded_file, engine='openpyxl')
+    elif uploaded_file.name.endswith(".xls"):
+        df = pd.read_excel(uploaded_file, engine='xlrd')
     else:
         st.error("Unsupported file type!")
         st.stop()
+
+    # --- DATA CLEANING (FOR CORRELATION FIX) ---
+    # Automatically convert 'Value' column to numeric if it contains strings/commas
+    if 'Value' in df.columns:
+        df['Value'] = pd.to_numeric(df['Value'].astype(str).str.replace(',', ''), errors='coerce')
 
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
@@ -163,7 +169,7 @@ if uploaded_file:
                     fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
                     st.plotly_chart(fig_heat, use_container_width=True)
                 else:
-                    st.warning("Not enough numeric columns for correlation.")
+                    st.warning("Not enough numeric columns for correlation analysis. Try cleaning your data columns.")
 
             st.markdown("---")
 
@@ -188,8 +194,8 @@ if uploaded_file:
         ml_ready_score = round(
             (completeness * 0.4) +
             ((100 - duplicate_pct) * 0.3) +
-            (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) +
-            (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15),
+            (min(len(numeric_cols)/df.shape[1] if df.shape[1] > 0 else 0, 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/df.shape[1] if df.shape[1] > 0 else 0, 1) * 100 * 0.15),
             2
         )
 
@@ -223,7 +229,3 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
