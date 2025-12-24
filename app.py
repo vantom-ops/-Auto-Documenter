@@ -144,7 +144,8 @@ if uploaded_file:
 
         # ---------- CONSOLIDATED VISUALIZATIONS DROPDOWN ----------
         with st.expander("📊 Data Visualizations & Analysis", expanded=True):
-            viz_options = ["🔥 Correlation Heatmap"] + [f"📈 {col} Trend" for col in numeric_cols]
+            # Combined options into one clean list
+            viz_options = ["🔥 Correlation Heatmap"] + [f"📈 {col} Graph" for col in numeric_cols]
             selection = st.selectbox("Select Analysis or Graph", viz_options)
 
             if selection == "🔥 Correlation Heatmap":
@@ -152,13 +153,15 @@ if uploaded_file:
                     corr = df[numeric_cols].corr().round(2)
                     st.markdown("### 🔥 Correlation Matrix Table")
                     st.dataframe(corr, use_container_width=True)
+                    st.markdown("### 🔥 Correlation Heatmap")
                     fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("Not enough numeric columns for a correlation heatmap.")
             else:
-                # Extract column name from selection (removing the "📈 " prefix and " Trend" suffix)
-                col_to_plot = selection.replace("📈 ", "").replace(" Trend", "")
+                # Extracting column name to plot individual graph
+                col_to_plot = selection.replace("📈 ", "").replace(" Graph", "")
+                st.markdown(f"### 📈 {col_to_plot} Individual Trend")
                 fig = px.line(df, y=col_to_plot, title=f"{col_to_plot} Trend Analysis")
                 st.plotly_chart(fig, use_container_width=True)
 
