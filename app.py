@@ -8,7 +8,7 @@ import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
-    page_title="📄 Auto-Documenter",
+    page_title="####📄 Auto-Documenter",
     page_icon="📊",
     layout="wide"
 )
@@ -161,7 +161,7 @@ if uploaded_file:
             st.markdown("---")
 
             # --- SEPARATE DROP DOWN 2: INDIVIDUAL GRAPHS ---
-            st.markdown("### 📈 Individual Column Graphs")
+            st.markdown("### 📈 Column Graphs")
             if numeric_cols:
                 graph_col = st.selectbox("Select Column to Visualize", ["Select a column..."] + numeric_cols)
                 if graph_col != "Select a column...":
@@ -186,7 +186,7 @@ if uploaded_file:
             2
         )
 
-        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
+        st.markdown("## 🤖 ML Readiness Score ")
         st.markdown(f"""
         <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
                     width:100%; height:25px; border-radius:5px; position:relative;">
@@ -216,3 +216,4 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
+
