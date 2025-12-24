@@ -13,52 +13,51 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS FOR TRANSPARENT HORIZONTAL BUTTON ---
+# --- CSS FOR TRANSPARENT HORIZONTAL BUTTON & PC VISIBILITY ---
 st.markdown("""
     <style>
     .main .block-container {
         padding-bottom: 200px !important;
     }
     
-    /* Fixed Footer Wrapper */
+    /* Centered Fixed Footer Wrapper */
     .footer-container {
         position: fixed !important;
         left: 0 !important;
         bottom: 0 !important;
         width: 100% !important;
-        background-color: rgba(14, 17, 23, 0.85) !important; /* Semi-transparent dark bg */
-        padding: 30px 0 !important;
+        background-color: rgba(14, 17, 23, 0.9) !important; 
+        padding: 25px 0 !important;
         text-align: center !important;
         z-index: 999999 !important;
-        border-top: 1px solid rgba(255, 75, 75, 0.3);
+        border-top: 1px solid rgba(255, 75, 75, 0.4);
     }
 
-    /* Horizontal Transparent Button Styling */
+    /* Horizontal Transparent Button */
     div.stDownloadButton {
         display: flex !important;
         justify-content: center !important;
     }
 
     div.stDownloadButton > button {
-        width: 80% !important; /* Makes it horizontal and wide */
+        width: 85% !important; /* Wide horizontal layout */
         height: 70px !important;
-        background-color: transparent !important; /* Transparent */
-        color: #ff4b4b !important; /* Red Text */
+        background-color: transparent !important;
+        color: #ff4b4b !important;
         font-size: 20px !important;
         font-weight: 800 !important;
         text-transform: uppercase;
         letter-spacing: 2px;
-        border: 2px solid #ff4b4b !important; /* Red Border */
+        border: 2px solid #ff4b4b !important;
         border-radius: 12px !important;
-        transition: all 0.3s ease-in-out;
+        transition: 0.3s;
     }
     
-    /* Hover effect */
     div.stDownloadButton > button:hover {
-        background-color: rgba(255, 75, 75, 0.1) !important;
-        color: white !important;
+        background-color: rgba(255, 75, 75, 0.15) !important;
         border-color: white !important;
-        box-shadow: 0px 0px 20px rgba(255, 75, 75, 0.4) !important;
+        color: white !important;
+        box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -103,7 +102,6 @@ if uploaded_file:
             st.session_state['analysis_result'] = result
             st.rerun()
 
-    # Check if results exist
     if 'analysis_result' in st.session_state:
         result = st.session_state['analysis_result']
 
@@ -113,7 +111,6 @@ if uploaded_file:
 
         # ---------- DISPLAY METRICS ----------
         st.success("✅ Documentation generated successfully!")
-
         st.markdown("## 📊 Dataset Metrics")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows", result['summary']['rows'])
@@ -127,8 +124,8 @@ if uploaded_file:
         type_df = pd.DataFrame(list(col_types.items()), columns=["Column", "Data Type"])
         st.dataframe(type_df, use_container_width=True)
 
-        # ---------- NUMERIC & CATEGORICAL ----------
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
 
         # ---------- MIN / AVG / MAX GRADIENT BAR ----------
         st.markdown("## 📈 Column Statistics (Min / Avg / Max)")
@@ -143,7 +140,7 @@ if uploaded_file:
                 <div style="flex:1; background:linear-gradient(to right, #ffea00, #ffd700); height:20px;"></div>
                 <div style="flex:1; background:linear-gradient(to right, #00ff4b, #00cc33); height:20px;"></div>
             </div>
-            <div style="margin-bottom:10px;">Min: {min_val} | Avg: {avg_val} | Max: {max_val}</div>
+            <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
         # ---------- COLUMN GRAPHS ----------
@@ -152,12 +149,24 @@ if uploaded_file:
                 fig = px.line(df, y=col, title=f"{col} Trend")
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ---------- ML READINESS SCORE ----------
-        missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-        completeness = round(100 - missing_pct.mean(), 2)
-        ml_ready_score = round(completeness, 2) # simplified for example
+        # ---------- CORRELATION HEATMAP (RESTORED) ----------
+        if len(numeric_cols) > 1:
+            with st.expander("🔥 Correlation Heatmap (Interactive)", expanded=True):
+                corr = df[numeric_cols].corr().round(2)
+                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
+                st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("## 🤖 ML Readiness Score")
+        # ---------- WARNINGS ----------
+        st.markdown("## ⚠ Missing Values % per Column")
+        missing_pct = (df.isna().sum() / len(df) * 100).round(2)
+        st.dataframe(missing_pct, use_container_width=True)
+
+        # ---------- ML READINESS SCORE ----------
+        completeness = round(100 - missing_pct.mean(), 2)
+        duplicate_pct = round(df.duplicated().mean() * 100, 2)
+        ml_ready_score = round((completeness * 0.4) + ((100 - duplicate_pct) * 0.3) + (min(len(numeric_cols)/df.shape[1], 1) * 100 * 0.15) + (min(len(categorical_cols)/df.shape[1], 1) * 100 * 0.15), 2)
+
+        st.markdown("## 🤖 ML Readiness Score & Suggested Algorithms")
         st.markdown(f"""
         <div style="background:linear-gradient(to right, #ff4b4b, #ff9999, #00ff4b); 
                     width:100%; height:25px; border-radius:5px; position:relative;">
@@ -166,7 +175,7 @@ if uploaded_file:
         </div>
         """, unsafe_allow_html=True)
 
-        # ---------- FIXED HORIZONTAL TRANSPARENT DOWNLOAD BUTTON ----------
+        # ---------- DOWNLOAD BUTTON (TRANSPARENT & HORIZONTAL) ----------
         pdf_path = "output/report.pdf" 
         if os.path.exists(pdf_path):
             st.markdown('<div class="footer-container">', unsafe_allow_html=True)
