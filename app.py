@@ -13,53 +13,62 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS FOR TRANSPARENT HORIZONTAL BUTTON & PC VISIBILITY ---
+# --- CSS FOR TRANSPARENT HORIZONTAL BUTTON & PC VISIBILITY + FOOTER ---
 st.markdown("""
-    <style>
-    .main .block-container {
-        padding-bottom: 200px !important;
-    }
-    
-    /* Centered Fixed Footer Wrapper */
+<style>
+.main .block-container {
+    padding-bottom: 200px !important;
+}
+
+/* Centered Fixed Footer Wrapper */
+.footer-container {
+    position: fixed !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    background-color: rgba(14, 17, 23, 0.9) !important; 
+    padding: 25px 0 !important;
+    text-align: center !important;
+    z-index: 999999 !important;
+    border-top: 1px solid rgba(255, 75, 75, 0.4);
+    font-size: 14px !important;
+    color: white !important;
+}
+
+/* Hide footer on small screens (mobile) */
+@media only screen and (max-width: 768px) {
     .footer-container {
-        position: fixed !important;
-        left: 0 !important;
-        bottom: 0 !important;
-        width: 100% !important;
-        background-color: rgba(14, 17, 23, 0.9) !important; 
-        padding: 25px 0 !important;
-        text-align: center !important;
-        z-index: 999999 !important;
-        border-top: 1px solid rgba(255, 75, 75, 0.4);
+        display: none !important;
     }
+}
 
-    /* Horizontal Transparent Button */
-    div.stDownloadButton {
-        display: flex !important;
-        justify-content: center !important;
-    }
+/* Horizontal Transparent Button */
+div.stDownloadButton {
+    display: flex !important;
+    justify-content: center !important;
+}
 
-    div.stDownloadButton > button {
-        width: 85% !important;
-        height: 70px !important;
-        background-color: transparent !important;
-        color: #ff4b4b !important;
-        font-size: 20px !important;
-        font-weight: 800 !important;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        border: 2px solid #ff4b4b !important;
-        border-radius: 12px !important;
-        transition: 0.3s;
-    }
-    
-    div.stDownloadButton > button:hover {
-        background-color: rgba(255, 75, 75, 0.15) !important;
-        border-color: white !important;
-        color: white !important;
-        box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
-    }
-    </style>
+div.stDownloadButton > button {
+    width: 85% !important;
+    height: 70px !important;
+    background-color: transparent !important;
+    color: #ff4b4b !important;
+    font-size: 20px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    border: 2px solid #ff4b4b !important;
+    border-radius: 12px !important;
+    transition: 0.3s;
+}
+
+div.stDownloadButton > button:hover {
+    background-color: rgba(255, 75, 75, 0.15) !important;
+    border-color: white !important;
+    color: white !important;
+    box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ---------- CENTERED HEADER ----------
@@ -217,7 +226,7 @@ if uploaded_file:
             st.markdown('<div class="footer-container">', unsafe_allow_html=True)
 
             # Center the button
-            st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center; margin-bottom:10px;">', unsafe_allow_html=True)
             with open(pdf_path, "rb") as f:
                 st.download_button(
                     label="📥 DOWNLOAD PDF REPORT",
@@ -226,5 +235,13 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # Footer text with copyright + license + GitHub
+            st.markdown("""
+            <div style="text-align:center; font-size:12px; margin-top:5px;">
+                © 2025 Auto-Documenter | Apache License 2.0 | 
+                <a href="https://github.com/your-github-link" target="_blank" style="color:white;">GitHub</a>
+            </div>
+            """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
