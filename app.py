@@ -199,5 +199,6 @@ if uploaded_file:
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("📥 DOWNLOAD PROFESSIONAL DOCUMENTATION (PDF)", f, file_name="Data_Report.pdf")
+                st.download_button("📥 DOWNLOAD PDF", f, file_name="Data_Report.pdf")
         st.markdown('</div>', unsafe_allow_html=True)
+
