@@ -88,18 +88,22 @@ with st.sidebar:
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("Choose a file", type=['csv', 'xlsx', 'xls'])
+# Removed 'xls' from type list
+uploaded_file = st.file_uploader("Choose a file", type=['csv', 'xlsx'])
 
 if uploaded_file:
-    # --- LOAD DATA WITH ENGINE FIX ---
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    elif uploaded_file.name.endswith(".xlsx"):
-        df = pd.read_excel(uploaded_file, engine='openpyxl')
-    elif uploaded_file.name.endswith(".xls"):
-        df = pd.read_excel(uploaded_file, engine='xlrd')
-    else:
-        st.error("Unsupported file type!")
+    # --- LOAD DATA ---
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        elif uploaded_file.name.endswith(".xlsx"):
+            # openpyxl is the standard engine for modern .xlsx files
+            df = pd.read_excel(uploaded_file, engine='openpyxl')
+        else:
+            st.error("Unsupported file type! Please use .csv or .xlsx")
+            st.stop()
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
         st.stop()
 
     # --- DATA CLEANING ---
@@ -194,11 +198,15 @@ if uploaded_file:
         # ---------- ML READINESS SCORE ----------
         completeness = round(100 - missing_pct.mean(), 2)
         duplicate_pct = round(df.duplicated().mean() * 100, 2)
+        
+        # Guard against division by zero if df is empty or has no columns
+        total_cols = df.shape[1] if df.shape[1] > 0 else 1
+        
         ml_ready_score = round(
             (completeness * 0.4) +
             ((100 - duplicate_pct) * 0.3) +
-            (min(len(numeric_cols)/df.shape[1] if df.shape[1] > 0 else 0, 1) * 100 * 0.15) +
-            (min(len(categorical_cols)/df.shape[1] if df.shape[1] > 0 else 0, 1) * 100 * 0.15),
+            (min(len(numeric_cols)/total_cols, 1) * 100 * 0.15) +
+            (min(len(categorical_cols)/total_cols, 1) * 100 * 0.15),
             2
         )
 
@@ -245,8 +253,3 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
-
-
-
-
-
