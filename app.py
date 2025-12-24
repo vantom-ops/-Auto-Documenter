@@ -13,6 +13,35 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- CSS FOR FIXED DOWNLOAD BUTTON (PC & MOBILE) ---
+st.markdown("""
+    <style>
+    .main .block-container {
+        padding-bottom: 150px !important;
+    }
+    .footer-container {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: rgba(14, 17, 23, 0.95);
+        padding: 20px 0;
+        text-align: center;
+        z-index: 9999;
+        border-top: 1px solid #333;
+    }
+    div.stDownloadButton > button {
+        width: 60% !important;
+        height: 60px !important;
+        background-color: #ff4b4b !important;
+        color: white !important;
+        font-weight: bold !important;
+        font-size: 18px !important;
+        border-radius: 10px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # ---------- HEADER ----------
 st.markdown("# 📄 Auto-Documenter")
 st.markdown("Upload a CSV, Excel, or JSON file to generate interactive documentation.")
@@ -50,6 +79,12 @@ if uploaded_file:
 
             # Call parser
             result = analyze_file(temp_path)
+            st.session_state['analysis_result'] = result
+            st.rerun() # Refresh to show the download button immediately
+
+    # Check if results exist in session state
+    if 'analysis_result' in st.session_state:
+        result = st.session_state['analysis_result']
 
         if "error" in result:
             st.error(f"Error: {result['error']}")
@@ -136,3 +171,15 @@ if uploaded_file:
         </div>
         """, unsafe_allow_html=True)
 
+        # ---------- FIXED DOWNLOAD BUTTON AT BOTTOM ----------
+        pdf_path = "output/report.pdf" # Ensuring this matches your parser's output
+        if os.path.exists(pdf_path):
+            st.markdown('<div class="footer-container">', unsafe_allow_html=True)
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    label="📥 DOWNLOAD FULL PDF REPORT",
+                    data=f,
+                    file_name="Data_Documentation_Report.pdf",
+                    mime="application/pdf"
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
