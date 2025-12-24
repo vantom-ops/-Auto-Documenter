@@ -142,20 +142,24 @@ if uploaded_file:
             <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
-        # ---------- COLUMN GRAPHS (SINGLE DROPDOWN CUSTOMIZATION) ----------
-        with st.expander("📊 Column Graphs (Interactive)"):
-            if numeric_cols:
-                selected_col = st.selectbox("Select Column to Visualize", numeric_cols)
-                fig = px.line(df, y=selected_col, title=f"{selected_col} Trend")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.write("No numeric columns available for graphing.")
+        # ---------- CONSOLIDATED VISUALIZATIONS DROPDOWN ----------
+        with st.expander("📊 Data Visualizations & Analysis", expanded=True):
+            viz_options = ["🔥 Correlation Heatmap"] + [f"📈 {col} Trend" for col in numeric_cols]
+            selection = st.selectbox("Select Analysis or Graph", viz_options)
 
-        # ---------- CORRELATION HEATMAP ----------
-        if len(numeric_cols) > 1:
-            with st.expander("🔥 Correlation Heatmap (Interactive)", expanded=True):
-                corr = df[numeric_cols].corr().round(2)
-                fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
+            if selection == "🔥 Correlation Heatmap":
+                if len(numeric_cols) > 1:
+                    corr = df[numeric_cols].corr().round(2)
+                    st.markdown("### 🔥 Correlation Matrix Table")
+                    st.dataframe(corr, use_container_width=True)
+                    fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Not enough numeric columns for a correlation heatmap.")
+            else:
+                # Extract column name from selection (removing the "📈 " prefix and " Trend" suffix)
+                col_to_plot = selection.replace("📈 ", "").replace(" Trend", "")
+                fig = px.line(df, y=col_to_plot, title=f"{col_to_plot} Trend Analysis")
                 st.plotly_chart(fig, use_container_width=True)
 
         # ---------- WARNINGS ----------
@@ -185,41 +189,12 @@ if uploaded_file:
 
         # ---------- ML ALGORITHM SUGGESTIONS ----------
         st.markdown("### 🧠 Suggested ML Algorithms")
-
         if ml_ready_score < 40:
-            st.info("""
-            **Low ML Readiness**
-            - Clean missing values
-            - Remove duplicates
-            - Normalize data
-
-            **Suggested Algorithms:**
-            - Linear Regression
-            - Logistic Regression
-            - Naive Bayes
-            """)
-
+            st.info("**Low ML Readiness**\n- Clean missing values\n- Remove duplicates\n- Normalize data\n\n**Suggested:** Linear/Logistic Regression, Naive Bayes")
         elif 40 <= ml_ready_score < 70:
-            st.warning("""
-            **Moderate ML Readiness**
-
-            **Suggested Algorithms:**
-            - Decision Tree
-            - Random Forest
-            - KNN
-            - Support Vector Machine (SVM)
-            """)
-
+            st.warning("**Moderate ML Readiness**\n\n**Suggested:** Decision Tree, Random Forest, KNN, SVM")
         else:
-            st.success("""
-            **High ML Readiness 🚀**
-
-            **Suggested Algorithms:**
-            - Gradient Boosting (XGBoost / LightGBM)
-            - Neural Networks
-            - Ensemble Models
-            - AutoML
-            """)
+            st.success("**High ML Readiness 🚀**\n\n**Suggested:** XGBoost, Neural Networks, Ensemble Models, AutoML")
 
         # ---------- DOWNLOAD BUTTON ----------
         pdf_path = "output/report.pdf" 
