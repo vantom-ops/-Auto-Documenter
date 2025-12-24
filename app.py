@@ -62,7 +62,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------- HEADER ----------
+# ---------- CENTERED HEADER ----------
 st.markdown("""
 <div style="text-align:center;">
     <h1>📄 Auto-Documenter</h1>
@@ -72,7 +72,6 @@ st.markdown("""
     <hr>
 </div>
 """, unsafe_allow_html=True)
-
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
@@ -94,8 +93,7 @@ if uploaded_file:
         st.error("Unsupported file type!")
         st.stop()
 
-    # --- DATA CLEANING (FOR CORRELATION FIX) ---
-    # Automatically convert 'Value' column to numeric if it contains strings/commas
+    # --- DATA CLEANING ---
     if 'Value' in df.columns:
         df['Value'] = pd.to_numeric(df['Value'].astype(str).str.replace(',', ''), errors='coerce')
 
@@ -155,13 +153,11 @@ if uploaded_file:
             <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
-        # ---------- DATA VISUALIZATIONS SECTION ----------
+        # ---------- DATA VISUALIZATIONS ----------
         with st.expander("📊 Data Visualizations & Analysis", expanded=True):
-            
-            # --- SEPARATE DROP DOWN 1: CORRELATION ---
+            # Correlation
             st.markdown("### 🔥 Correlation Analysis")
             corr_option = st.selectbox("Select Correlation View", ["None", "View Heatmap & Table"])
-            
             if corr_option == "View Heatmap & Table":
                 if len(numeric_cols) > 1:
                     corr = df[numeric_cols].corr().round(2)
@@ -169,11 +165,9 @@ if uploaded_file:
                     fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
                     st.plotly_chart(fig_heat, use_container_width=True)
                 else:
-                    st.warning("Not enough numeric columns for correlation analysis. Try cleaning your data columns.")
+                    st.warning("Not enough numeric columns for correlation analysis.")
 
-            st.markdown("---")
-
-            # --- SEPARATE DROP DOWN 2: INDIVIDUAL GRAPHS ---
+            # Column Graphs
             st.markdown("### 📈 Column Graphs")
             if numeric_cols:
                 graph_col = st.selectbox("Select Column to Visualize", ["Select a column..."] + numeric_cols)
@@ -218,23 +212,19 @@ if uploaded_file:
             st.success("**High ML Readiness 🚀**\n\n**Suggested:** XGBoost, Neural Networks, Ensemble Models, AutoML")
 
         # ---------- DOWNLOAD BUTTON ----------
-       pdf_path = "output/report.pdf" 
-if os.path.exists(pdf_path):
-    st.markdown('<div class="footer-container">', unsafe_allow_html=True)
-    
-    # Center the button
-    st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
-    with open(pdf_path, "rb") as f:
-        st.download_button(
-            label="📥 DOWNLOAD PDF REPORT",
-            data=f,
-            file_name="Documentation_Report.pdf",
-            mime="application/pdf"
-        )
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        pdf_path = "output/report.pdf"
+        if os.path.exists(pdf_path):
+            st.markdown('<div class="footer-container">', unsafe_allow_html=True)
 
+            # Center the button
+            st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    label="📥 DOWNLOAD PDF REPORT",
+                    data=f,
+                    file_name="Documentation_Report.pdf",
+                    mime="application/pdf"
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
 
-
-
+            st.markdown('</div>', unsafe_allow_html=True)
