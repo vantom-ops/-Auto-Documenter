@@ -218,14 +218,20 @@ if uploaded_file:
             st.success("**High ML Readiness 🚀**\n\n**Suggested:** XGBoost, Neural Networks, Ensemble Models, AutoML")
 
         # ---------- DOWNLOAD BUTTON ----------
-        pdf_path = "output/report.pdf" 
-        if os.path.exists(pdf_path):
-            st.markdown('<div class="footer-container">', unsafe_allow_html=True)
-            with open(pdf_path, "rb") as f:
-                st.download_button(
-                    label="📥 DOWNLOAD PDF REPORT",
-                    data=f,
-                    file_name="Documentation_Report.pdf",
-                    mime="application/pdf"
-                )
-            st.markdown('</div>', unsafe_allow_html=True)
+       pdf_path = "output/report.pdf" 
+if os.path.exists(pdf_path):
+    st.markdown('<div class="footer-container">', unsafe_allow_html=True)
+    
+    st.markdown('<div style="text-align:center;">', unsafe_allow_html=True)
+    with open(pdf_path, "rb") as f:
+        st.download_button(
+            label="📥 DOWNLOAD PDF REPORT",
+            data=f,
+            file_name="Documentation_Report.pdf",
+            mime="application/pdf"
+        )
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
