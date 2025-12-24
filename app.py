@@ -80,7 +80,7 @@ with st.sidebar:
     preview_rows = st.slider("Preview Rows", 5, 50, 10)
 
 # ---------- FILE UPLOADER ----------
-uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls", "json"])
+uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx", "xls"])
 
 if uploaded_file:
     if uploaded_file.name.endswith(".csv"):
@@ -223,6 +223,7 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
