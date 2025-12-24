@@ -8,7 +8,7 @@ import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
-    page_title="📄 Auto-Documenter",
+    page_title="Auto-Documenter",
     page_icon="📊",
     layout="wide"
 )
@@ -76,7 +76,7 @@ st.markdown("""
 <div style="text-align:center;">
     <h1>📄 Auto-Documenter</h1>
     <p style="font-size:18px;">
-        Upload a CSV or Excel to generate interactive documentation.
+        📤 Upload a CSV or Excel to generate interactive documentation.
     </p>
     <hr>
 </div>
@@ -245,6 +245,7 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
