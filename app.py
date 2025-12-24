@@ -7,11 +7,15 @@ from parser import analyze_file
 import os
 from datetime import datetime
 
-# PDF watermark (added safely)
-from PyPDF2 import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from io import BytesIO
+# ---------- SAFE PDF IMPORT ----------
+try:
+    from PyPDF2 import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from io import BytesIO
+    PDF_WATERMARK_AVAILABLE = True
+except ModuleNotFoundError:
+    PDF_WATERMARK_AVAILABLE = False
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -27,7 +31,6 @@ st.markdown("""
     padding-bottom: 220px !important;
 }
 
-/* Footer */
 .footer-container {
     position: fixed !important;
     left: 0;
@@ -40,14 +43,14 @@ st.markdown("""
     border-top: 1px solid rgba(255, 75, 75, 0.4);
 }
 
-/* Hide footer on mobile */
+/* Auto-hide footer on mobile */
 @media (max-width: 768px) {
     .footer-container {
         display: none !important;
     }
 }
 
-/* Download button */
+/* Big horizontal download button */
 div.stDownloadButton {
     display: flex !important;
     justify-content: center !important;
@@ -63,13 +66,6 @@ div.stDownloadButton > button {
     letter-spacing: 2.5px;
     border: 2px solid #ff4b4b !important;
     border-radius: 14px !important;
-    transition: 0.3s;
-}
-
-div.stDownloadButton > button:hover {
-    background-color: rgba(255, 75, 75, 0.15) !important;
-    color: white !important;
-    box-shadow: 0px 0px 25px rgba(255, 75, 75, 0.5) !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -101,7 +97,6 @@ if uploaded_file:
     st.markdown("## 🔍 File Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # ---------- GENERATE ----------
     if st.button("🚀 Generate Documentation"):
         with st.spinner("Processing file..."):
             os.makedirs("temp_upload", exist_ok=True)
@@ -109,34 +104,14 @@ if uploaded_file:
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            result = analyze_file(temp_path)
-            st.session_state['analysis_result'] = result
+            st.session_state['analysis_result'] = analyze_file(temp_path)
             st.rerun()
 
-    if 'analysis_result' in st.session_state:
-        result = st.session_state['analysis_result']
-
-        if "error" in result:
-            st.error(result["error"])
-            st.stop()
-
-        st.success("✅ Documentation generated successfully!")
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Rows", result['summary']['rows'])
-        c2.metric("Columns", result['summary']['columns'])
-        c3.metric("Numeric Columns", result['numeric_count'])
-        c4.metric("Categorical Columns", result['categorical_count'])
-
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-
-        if len(numeric_cols) > 1:
-            corr = df[numeric_cols].corr()
-            fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r")
-            st.plotly_chart(fig, use_container_width=True)
-
-# ---------- PDF WATERMARK (ADD-ON ONLY) ----------
+# ---------- SAFE WATERMARK FUNCTION ----------
 def add_watermark(input_pdf, output_pdf):
+    if not PDF_WATERMARK_AVAILABLE:
+        return input_pdf
+
     reader = PdfReader(input_pdf)
     writer = PdfWriter()
 
@@ -161,18 +136,19 @@ def add_watermark(input_pdf, output_pdf):
     with open(output_pdf, "wb") as f:
         writer.write(f)
 
+    return output_pdf
+
 # ---------- FOOTER ----------
 pdf_path = "output/report.pdf"
 watermarked_pdf = "output/report_watermarked.pdf"
 
 if os.path.exists(pdf_path):
-    add_watermark(pdf_path, watermarked_pdf)
-
+    final_pdf = add_watermark(pdf_path, watermarked_pdf)
     year = datetime.now().year
 
     st.markdown('<div class="footer-container">', unsafe_allow_html=True)
 
-    with open(watermarked_pdf, "rb") as f:
+    with open(final_pdf, "rb") as f:
         st.download_button(
             "📥 DOWNLOAD PDF REPORT",
             f,
@@ -181,13 +157,11 @@ if os.path.exists(pdf_path):
         )
 
     st.markdown(f"""
-    <div style="margin-top:18px; font-size:13px; color:#bbbbbb; line-height:1.6;">
+    <div style="margin-top:18px; font-size:13px; color:#bbbbbb;">
         © {year} Auto-Documenter<br>
-        Apache License – Version 2.0, January 2004<br>
-        <a href="http://www.apache.org/licenses/" target="_blank" style="color:#ff4b4b;">Apache License</a><br>
-        <a href="https://github.com/your-username/auto-documenter" target="_blank" style="color:#ff4b4b;">
-            GitHub Repository
-        </a>
+        Apache License Version 2.0<br>
+        <a href="http://www.apache.org/licenses/" target="_blank" style="color:#ff4b4b;">License</a><br>
+        <a href="https://github.com/your-username/auto-documenter" target="_blank" style="color:#ff4b4b;">GitHub</a>
     </div>
     """, unsafe_allow_html=True)
 
