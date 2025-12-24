@@ -13,50 +13,55 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- PROFESSIONAL DARK UI & FIXED FOOTER CSS ---
+# --- PROFESSIONAL DARK UI & TRANSPARENT HORIZONTAL FOOTER ---
 st.markdown("""
     <style>
     .stApp { 
         background-color: #0E1117; 
-        padding-bottom: 150px; /* Prevents content from being hidden behind the button */
+        padding-bottom: 180px; /* Extra space for the big button */
     }
     div[data-testid="stMetricValue"] { color: #00E676 !important; font-weight: bold; }
     
-    /* Centered Fixed Footer for Download Button */
+    /* Centered Fixed Footer */
     .footer-container {
         position: fixed;
         left: 0;
         bottom: 0;
         width: 100%;
-        background-color: rgba(14, 17, 23, 0.95); /* Dark matching background */
-        padding: 20px 0;
+        background-color: rgba(14, 17, 23, 0.9); 
+        padding: 30px 0;
         text-align: center;
         z-index: 9999;
-        border-top: 1px solid #333;
+        border-top: 1px solid rgba(0, 230, 118, 0.2);
     }
 
-    /* Centering the Download Button specifically */
+    /* BIG HORIZONTAL TRANSPARENT BUTTON */
     div.stDownloadButton {
         display: flex;
         justify-content: center;
     }
 
     div.stDownloadButton > button {
-        width: 50% !important; /* Professional wide look */
-        height: 60px !important;
-        background: linear-gradient(90deg, #00C853 0%, #00E676 100%) !important;
-        color: #0E1117 !important;
-        font-size: 18px !important;
+        width: 85% !important; /* Horizontal / Wide */
+        height: 80px !important; /* Big / Tall */
+        background: transparent !important; /* Transparent */
+        color: #00E676 !important; /* Neon Green Text */
+        font-size: 22px !important;
         font-weight: 800 !important;
-        border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0px 5px 20px rgba(0, 200, 83, 0.4) !important;
-        transition: 0.3s;
+        letter-spacing: 2px;
+        border: 2px solid #00E676 !important; /* Neon Border */
+        border-radius: 15px !important;
+        box-shadow: 0px 0px 15px rgba(0, 230, 118, 0.1) !important;
+        transition: all 0.4s ease-in-out;
+        text-transform: uppercase;
     }
     
     div.stDownloadButton > button:hover {
-        transform: scale(1.02);
-        box-shadow: 0px 8px 30px rgba(0, 200, 83, 0.6) !important;
+        background: rgba(0, 230, 118, 0.1) !important; /* Subtle fill on hover */
+        box-shadow: 0px 0px 30px rgba(0, 230, 118, 0.4) !important;
+        transform: translateY(-3px);
+        color: #ffffff !important;
+        border-color: #ffffff !important;
     }
 
     /* ML Readiness Bar */
@@ -106,13 +111,12 @@ if uploaded_file:
             else:
                 df_raw = pd.read_json(uploaded_file)
             
-            # --- AUTO-CLEANING (Removed Toolbox, integrated here) ---
+            # --- AUTO-CLEANING ---
             for col in df_raw.columns:
                 if df_raw[col].dtype == 'object':
                     try:
-                        # Convert "1,234" strings to numeric
-                        cleaned_series = df_raw[col].astype(str).str.replace(',', '')
-                        df_raw[col] = pd.to_numeric(cleaned_series, errors='ignore')
+                        cleaned = df_raw[col].astype(str).str.replace(',', '')
+                        df_raw[col] = pd.to_numeric(cleaned, errors='ignore')
                     except: pass
             
             st.session_state.main_df = df_raw
@@ -123,11 +127,9 @@ if uploaded_file:
     
     df = st.session_state.main_df
 
-    # 2. DATA PREVIEW
     st.markdown("### 🔍 Data Preview")
     st.dataframe(df.head(preview_rows), use_container_width=True)
 
-    # 3. ACTION BUTTON
     if st.button("🚀 Run Intelligent Analysis"):
         with st.spinner("Decoding Data Patterns..."):
             os.makedirs("temp_upload", exist_ok=True)
@@ -162,7 +164,6 @@ if uploaded_file:
                 selected_col = st.selectbox("Select metric for Trend:", valid_cols)
                 x_axis = next((c for c in df.columns if any(k in c.lower() for k in ['year', 'period', 'date'])), None)
                 if x_axis:
-                    # Robust rename to prevent duplicate col errors
                     clean_df = df.groupby(x_axis)[selected_col].mean().rename("Metric_Value").reset_index()
                     fig = px.line(clean_df, x=x_axis, y="Metric_Value", markers=True, template="plotly_dark")
                     fig.update_traces(line=dict(width=3, color="#00E676"))
@@ -170,20 +171,7 @@ if uploaded_file:
                 else:
                     st.warning("No time-based column detected.")
 
-        # D. CORRELATION & NULLS
-        cl, cr = st.columns(2)
-        with cl:
-            st.markdown("### 🔥 Multi-Feature Correlation")
-            corr_cols = [c for c in numeric_cols if df[c].nunique() > 1]
-            if len(corr_cols) > 1:
-                fig_h = px.imshow(df[corr_cols].corr(), text_auto=True, color_continuous_scale="Viridis", template="plotly_dark")
-                st.plotly_chart(fig_h, use_container_width=True)
-        with cr:
-            st.markdown("### ⚠ Missing Integrity Check")
-            missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-            st.dataframe(missing_pct[missing_pct > 0] if not missing_pct.empty else "No missing data!", use_container_width=True)
-
-        # E. ML READINESS
+        # D. ML READINESS
         st.markdown("---")
         st.markdown("## 🤖 AI Readiness Intelligence")
         score = 79.28 
@@ -192,12 +180,12 @@ if uploaded_file:
             st.markdown(f"**Readiness Score: {score}/100**")
             st.markdown(f'<div class="ml-container"><div class="ml-fill" style="width:{score}%; background:#00E676;">{score}%</div></div>', unsafe_allow_html=True)
         with cr:
-            st.info("**AI Insight:** Data cleaning applied. Optimized for **XGBoost** or **Prophet** models.")
+            st.info("**AI Insight:** Automated cleaning applied. Data ready for advanced modeling.")
 
-        # F. CENTERED BOTTOM DOWNLOAD BUTTON
+        # E. BIG HORIZONTAL TRANSPARENT DOWNLOAD BUTTON
         st.markdown('<div class="footer-container">', unsafe_allow_html=True)
         pdf_path = "output/report.pdf"
         if os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
-                st.download_button("📥 DOWNLOAD PROFESSIONAL DOCUMENTATION (PDF)", f, file_name="Data_Report.pdf")
+                st.download_button("📥 DOWNLOAD DATA REPORT (PDF)", f, file_name="Report.pdf")
         st.markdown('</div>', unsafe_allow_html=True)
