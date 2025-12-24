@@ -142,11 +142,14 @@ if uploaded_file:
             <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
-        # ---------- COLUMN GRAPHS ----------
+        # ---------- COLUMN GRAPHS (SINGLE DROPDOWN CUSTOMIZATION) ----------
         with st.expander("📊 Column Graphs (Interactive)"):
-            for col in numeric_cols:
-                fig = px.line(df, y=col, title=f"{col} Trend")
+            if numeric_cols:
+                selected_col = st.selectbox("Select Column to Visualize", numeric_cols)
+                fig = px.line(df, y=selected_col, title=f"{selected_col} Trend")
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.write("No numeric columns available for graphing.")
 
         # ---------- CORRELATION HEATMAP ----------
         if len(numeric_cols) > 1:
@@ -180,7 +183,7 @@ if uploaded_file:
         </div>
         """, unsafe_allow_html=True)
 
-        # ---------- ML ALGORITHM SUGGESTIONS (ONLY ADDITION) ----------
+        # ---------- ML ALGORITHM SUGGESTIONS ----------
         st.markdown("### 🧠 Suggested ML Algorithms")
 
         if ml_ready_score < 40:
@@ -230,4 +233,3 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
-
