@@ -240,8 +240,9 @@ if uploaded_file:
             st.markdown("""
             <div style="text-align:center; font-size:12px; margin-top:5px;">
                 © 2025 Auto-Documenter | Apache License 2.0 | 
-                <a href="https://github.com/your-github-link" target="_blank" style="color:white;">GitHub</a>
+                <a href="https://github.com/vantom-ops" target="_blank" style="color:white;">GitHub</a>
             </div>
             """, unsafe_allow_html=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
+
