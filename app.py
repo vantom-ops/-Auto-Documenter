@@ -142,28 +142,33 @@ if uploaded_file:
             <div style="margin-bottom:10px;">Red: Min ({min_val}) | Yellow: Avg ({avg_val}) | Green: Max ({max_val})</div>
             """, unsafe_allow_html=True)
 
-        # ---------- CONSOLIDATED VISUALIZATIONS DROPDOWN ----------
+        # ---------- DATA VISUALIZATIONS SECTION ----------
         with st.expander("📊 Data Visualizations & Analysis", expanded=True):
-            # Combined options into one clean list
-            viz_options = ["🔥 Correlation Heatmap"] + [f"📈 {col} Graph" for col in numeric_cols]
-            selection = st.selectbox("Select Analysis or Graph", viz_options)
-
-            if selection == "🔥 Correlation Heatmap":
+            
+            # --- SEPARATE DROP DOWN 1: CORRELATION ---
+            st.markdown("### 🔥 Correlation Analysis")
+            corr_option = st.selectbox("Select Correlation View", ["None", "View Heatmap & Table"])
+            
+            if corr_option == "View Heatmap & Table":
                 if len(numeric_cols) > 1:
                     corr = df[numeric_cols].corr().round(2)
-                    st.markdown("### 🔥 Correlation Matrix Table")
                     st.dataframe(corr, use_container_width=True)
-                    st.markdown("### 🔥 Correlation Heatmap")
-                    fig = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig_heat = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r", aspect="auto")
+                    st.plotly_chart(fig_heat, use_container_width=True)
                 else:
-                    st.warning("Not enough numeric columns for a correlation heatmap.")
+                    st.warning("Not enough numeric columns for correlation.")
+
+            st.markdown("---")
+
+            # --- SEPARATE DROP DOWN 2: INDIVIDUAL GRAPHS ---
+            st.markdown("### 📈 Individual Column Graphs")
+            if numeric_cols:
+                graph_col = st.selectbox("Select Column to Visualize", ["Select a column..."] + numeric_cols)
+                if graph_col != "Select a column...":
+                    fig_ind = px.line(df, y=graph_col, title=f"{graph_col} Trend Analysis")
+                    st.plotly_chart(fig_ind, use_container_width=True)
             else:
-                # Extracting column name to plot individual graph
-                col_to_plot = selection.replace("📈 ", "").replace(" Graph", "")
-                st.markdown(f"### 📈 {col_to_plot} Individual Trend")
-                fig = px.line(df, y=col_to_plot, title=f"{col_to_plot} Trend Analysis")
-                st.plotly_chart(fig, use_container_width=True)
+                st.info("No numeric columns available.")
 
         # ---------- WARNINGS ----------
         st.markdown("## ⚠ Missing Values % per Column")
@@ -193,7 +198,7 @@ if uploaded_file:
         # ---------- ML ALGORITHM SUGGESTIONS ----------
         st.markdown("### 🧠 Suggested ML Algorithms")
         if ml_ready_score < 40:
-            st.info("**Low ML Readiness**\n- Clean missing values\n- Remove duplicates\n- Normalize data\n\n**Suggested:** Linear/Logistic Regression, Naive Bayes")
+            st.info("**Low ML Readiness**\n\n**Suggested:** Linear/Logistic Regression, Naive Bayes")
         elif 40 <= ml_ready_score < 70:
             st.warning("**Moderate ML Readiness**\n\n**Suggested:** Decision Tree, Random Forest, KNN, SVM")
         else:
