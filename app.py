@@ -3,12 +3,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from parser import analyze_file  # your phraiser.py / parser.py
+from parser import analyze_file  
 import os
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
-    page_title="####📄 Auto-Documenter",
+    page_title="📄 Auto-Documenter",
     page_icon="📊",
     layout="wide"
 )
@@ -63,9 +63,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("# 📄 Auto-Documenter")
-st.markdown("Upload a CSV, Excel, or JSON file to generate interactive documentation.")
-st.markdown("---")
+st.markdown("""
+<div style="text-align:center;">
+    <h1>📄 Auto-Documenter</h1>
+    <p style="font-size:18px;">
+        Upload a CSV, Excel, or JSON file to generate interactive documentation.
+    </p>
+    <hr>
+</div>
+""", unsafe_allow_html=True)
+
 
 # ---------- SIDEBAR ----------
 with st.sidebar:
@@ -216,4 +223,5 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
+
 
