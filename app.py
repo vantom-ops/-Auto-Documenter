@@ -180,6 +180,47 @@ if uploaded_file:
                         color:black; font-weight:bold;">{ml_ready_score}/100</div>
         </div>
         """, unsafe_allow_html=True)
+        # ---------- ML ALGORITHM SUGGESTIONS (ADD-ON ONLY) ----------
+st.markdown("### 🧠 Suggested ML Algorithms")
+
+if ml_ready_score < 40:
+    st.info("""
+    **Data Quality is Low**  
+    Recommended actions:
+    - Handle missing values
+    - Remove duplicates
+    - Feature scaling  
+
+    **Suggested Algorithms:**
+    - Linear Regression
+    - Logistic Regression
+    - Naive Bayes
+    """)
+
+elif 40 <= ml_ready_score < 70:
+    st.warning("""
+    **Moderate ML Readiness**  
+    Dataset is usable with preprocessing.
+
+    **Suggested Algorithms:**
+    - Decision Tree
+    - Random Forest
+    - K-Nearest Neighbors (KNN)
+    - Support Vector Machine (SVM)
+    """)
+
+else:
+    st.success("""
+    **High ML Readiness 🚀**  
+    Dataset is well-prepared for modeling.
+
+    **Suggested Algorithms:**
+    - Gradient Boosting (XGBoost / LightGBM)
+    - Neural Networks
+    - Ensemble Models
+    - AutoML Pipelines
+    """)
+
 
         # ---------- DOWNLOAD BUTTON ----------
         pdf_path = "output/report.pdf" 
@@ -193,3 +234,4 @@ if uploaded_file:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
+
