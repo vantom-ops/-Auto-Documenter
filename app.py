@@ -40,7 +40,7 @@ st.markdown("""
     }
 
     div.stDownloadButton > button {
-        width: 85% !important; /* Wide horizontal layout */
+        width: 85% !important;
         height: 70px !important;
         background-color: transparent !important;
         color: #ff4b4b !important;
@@ -97,7 +97,6 @@ if uploaded_file:
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            # Call parser
             result = analyze_file(temp_path)
             st.session_state['analysis_result'] = result
             st.rerun()
@@ -180,47 +179,44 @@ if uploaded_file:
                         color:black; font-weight:bold;">{ml_ready_score}/100</div>
         </div>
         """, unsafe_allow_html=True)
-        # ---------- ML ALGORITHM SUGGESTIONS (ADD-ON ONLY) ----------
-st.markdown("### 🧠 Suggested ML Algorithms")
 
-if ml_ready_score < 40:
-    st.info("""
-    **Data Quality is Low**  
-    Recommended actions:
-    - Handle missing values
-    - Remove duplicates
-    - Feature scaling  
+        # ---------- ML ALGORITHM SUGGESTIONS (ONLY ADDITION) ----------
+        st.markdown("### 🧠 Suggested ML Algorithms")
 
-    **Suggested Algorithms:**
-    - Linear Regression
-    - Logistic Regression
-    - Naive Bayes
-    """)
+        if ml_ready_score < 40:
+            st.info("""
+            **Low ML Readiness**
+            - Clean missing values
+            - Remove duplicates
+            - Normalize data
 
-elif 40 <= ml_ready_score < 70:
-    st.warning("""
-    **Moderate ML Readiness**  
-    Dataset is usable with preprocessing.
+            **Suggested Algorithms:**
+            - Linear Regression
+            - Logistic Regression
+            - Naive Bayes
+            """)
 
-    **Suggested Algorithms:**
-    - Decision Tree
-    - Random Forest
-    - K-Nearest Neighbors (KNN)
-    - Support Vector Machine (SVM)
-    """)
+        elif 40 <= ml_ready_score < 70:
+            st.warning("""
+            **Moderate ML Readiness**
 
-else:
-    st.success("""
-    **High ML Readiness 🚀**  
-    Dataset is well-prepared for modeling.
+            **Suggested Algorithms:**
+            - Decision Tree
+            - Random Forest
+            - KNN
+            - Support Vector Machine (SVM)
+            """)
 
-    **Suggested Algorithms:**
-    - Gradient Boosting (XGBoost / LightGBM)
-    - Neural Networks
-    - Ensemble Models
-    - AutoML Pipelines
-    """)
+        else:
+            st.success("""
+            **High ML Readiness 🚀**
 
+            **Suggested Algorithms:**
+            - Gradient Boosting (XGBoost / LightGBM)
+            - Neural Networks
+            - Ensemble Models
+            - AutoML
+            """)
 
         # ---------- DOWNLOAD BUTTON ----------
         pdf_path = "output/report.pdf" 
@@ -234,4 +230,3 @@ else:
                     mime="application/pdf"
                 )
             st.markdown('</div>', unsafe_allow_html=True)
-
