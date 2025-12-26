@@ -4,3 +4,5 @@ numpy
 plotly
 openpyxl
 fpdf2
+matplotlib
+seaborn
